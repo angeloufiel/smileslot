@@ -1,6 +1,6 @@
 # SmileSlot: online booking for a small dental clinic
 
-**Live demo:** _add your Vercel URL here_ · **Stack:** Next.js 16 (App Router), TypeScript, Supabase (Postgres, Auth, Storage, Row Level Security), Tailwind CSS 4
+**Live demo:** [smileslot-two.vercel.app](https://smileslot-two.vercel.app) · **Stack:** Next.js 16 (App Router), TypeScript, Supabase (Postgres, Auth, Storage, Row Level Security), Tailwind CSS 4
 
 SmileSlot replaces the usual small-clinic setup of a paper appointment book, a Facebook Messenger inbox and GCash screenshots scattered across a secretary's phone. Patients see real open times and book in under a minute, as guests or with an account. The front desk confirms bookings, verifies GCash, Maya and bank payments, and handles walk-ins from one dashboard. Each dentist sees only their own patients.
 
