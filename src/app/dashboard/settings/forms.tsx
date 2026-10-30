@@ -53,7 +53,7 @@ export function RoleForm({
             <Select name="role" aria-label="Role" value={current} onChange={(e) => setCurrent(e.target.value as AppRole)}>
               <option value="patient">Patient</option>
               <option value="dentist">Dentist</option>
-              <option value="receptionist">Receptionist</option>
+              <option value="secretary">Secretary</option>
               <option value="owner">Owner</option>
             </Select>
           </div>

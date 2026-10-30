@@ -14,7 +14,7 @@ If the Next.js check had a bug, layers 2 and 3 would still refuse the request. T
 |---|---|---|
 | anon (guest) | Not logged in | n/a |
 | patient | `profiles.role` | Every new signup is a patient, always |
-| dentist, receptionist, owner | `profiles.role` | Only an owner can change roles |
+| dentist, secretary, owner | `profiles.role` | Only an owner can change roles |
 
 The role is **never** read from the JWT's user metadata, because users can edit their own metadata. `handle_new_user()` ignores any `"role"` sent at signup (a test sends `"role":"owner"` and checks the account still becomes a patient).
 
@@ -24,7 +24,7 @@ Policies call small functions in the `private` schema, which is not exposed thro
 
 ```sql
 private.user_role()        -- role of the logged-in user (from profiles, active users only)
-private.is_front_desk()    -- owner or receptionist
+private.is_front_desk()    -- owner or secretary
 private.is_staff()         -- front desk or dentist
 private.my_customer_id()   -- the patient record linked to this login
 private.my_resource_ids()  -- the dentist calendar(s) linked to this login
@@ -41,7 +41,7 @@ They're `SECURITY DEFINER` (they read `profiles` without being blocked by RLS) w
 create policy "reservations: patient own, dentist assigned, front desk all"
   on public.reservations for select to authenticated
   using (
-    (select private.is_front_desk())                      -- receptionist/owner: everything
+    (select private.is_front_desk())                      -- secretary/owner: everything
     or customer_id = (select private.my_customer_id())    -- patient: bookings on their own record
     or resource_id in (select private.my_resource_ids())  -- dentist: bookings on their own calendar
   );

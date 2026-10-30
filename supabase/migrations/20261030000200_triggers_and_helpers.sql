@@ -21,15 +21,15 @@ create or replace function private.is_owner()
 returns boolean language sql stable security definer set search_path = ''
 as $$ select coalesce(private.user_role() = 'owner', false) $$;
 
--- Front desk = owner + receptionist (full operational access)
+-- Front desk = owner + secretary (full operational access)
 create or replace function private.is_front_desk()
 returns boolean language sql stable security definer set search_path = ''
-as $$ select coalesce(private.user_role() in ('owner', 'receptionist'), false) $$;
+as $$ select coalesce(private.user_role() in ('owner', 'secretary'), false) $$;
 
 -- Staff = front desk + dentists
 create or replace function private.is_staff()
 returns boolean language sql stable security definer set search_path = ''
-as $$ select coalesce(private.user_role() in ('owner', 'receptionist', 'dentist'), false) $$;
+as $$ select coalesce(private.user_role() in ('owner', 'secretary', 'dentist'), false) $$;
 
 -- The customer record that belongs to the logged-in patient (or NULL)
 create or replace function private.my_customer_id()
@@ -372,7 +372,7 @@ returns void language sql security definer set search_path = ''
 as $$
   insert into public.notifications (recipient_id, type, title, body, link)
   select id, p_type, p_title, p_body, p_link
-  from public.profiles where role in ('owner', 'receptionist') and is_active
+  from public.profiles where role in ('owner', 'secretary') and is_active
 $$;
 
 create or replace function private.reservation_notify()

@@ -33,7 +33,7 @@ erDiagram
   PROFILES {
     uuid id PK "= auth.users.id"
     text full_name
-    app_role role "owner | receptionist | dentist | patient"
+    app_role role "owner | secretary | dentist | patient"
     bool is_active
   }
   CUSTOMERS {

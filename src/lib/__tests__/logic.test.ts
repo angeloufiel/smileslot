@@ -26,7 +26,7 @@ describe("status rules", () => {
   });
 
   it("front desk can approve or reject a pending booking but never set 'expired' by hand", () => {
-    expect(nextStatusesFor("receptionist", "pending")).toEqual(["confirmed", "rejected", "cancelled"]);
+    expect(nextStatusesFor("secretary", "pending")).toEqual(["confirmed", "rejected", "cancelled"]);
   });
 
   it("patients get no status buttons and finished bookings have none", () => {

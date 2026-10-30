@@ -1,5 +1,5 @@
 """
-End-to-end walk through SmileSlot as every role (guest, receptionist, two dentists, owner, patient),
+End-to-end walk through SmileSlot as every role (guest, secretary, two dentists, owner, patient),
 against a running app wired to real Supabase Auth + PostgREST (see tests/local-stack/README.md).
 
     pip install playwright && playwright install chromium
@@ -34,6 +34,7 @@ def login(page, email):
     page.fill("input[name=email]", email)
     page.fill("input[name=password]", PW)
     page.click("button[type=submit]")
+    page.wait_for_url(lambda u: "/login" not in u, timeout=15000)   # wait for the sign-in redirect
     page.wait_for_load_state("networkidle")
 
 def left(page, path):
@@ -132,8 +133,8 @@ with sync_playwright() as p:
     ok("guest is sent to sign-in from /dashboard", "/login" in page.url)
 
     # ---------- 3. Front desk verifies the payment ----------
-    login(page, "frontdesk@demo.smileslot.app")
-    ok("receptionist lands on dashboard", page.url.rstrip("/").endswith("/dashboard"))
+    login(page, "secretary@demo.smileslot.app")
+    ok("secretary lands on dashboard", page.url.rstrip("/").endswith("/dashboard"))
     page.screenshot(path=f"{SHOTS}/05-dashboard-today.png", full_page=True)
     page.goto(f"{BASE}/dashboard/payments")
     ok("payment appears in the verification queue", shows(page, f"text={ref2}"))
@@ -191,9 +192,9 @@ with sync_playwright() as p:
     ok("calendar renders appointments", shows(page, "main a[href^='/dashboard/reservations/']"))
 
     page.goto(f"{BASE}/dashboard/settings")
-    ok("receptionist is kept out of owner settings", left(page, "/dashboard/settings"))
+    ok("secretary is kept out of owner settings", left(page, "/dashboard/settings"))
     page.goto(f"{BASE}/dashboard/audit")
-    ok("receptionist is kept out of the audit log", left(page, "/dashboard/audit"))
+    ok("secretary is kept out of the audit log", left(page, "/dashboard/audit"))
     logout(ctx)
 
     # ---------- 4. Dentist sees only their own ----------
@@ -224,7 +225,7 @@ with sync_playwright() as p:
     login(page, "owner@demo.smileslot.app")
     page.goto(f"{BASE}/dashboard/audit")
     page.screenshot(path=f"{SHOTS}/10-audit.png", full_page=True)
-    ok("owner sees the audit log with the receptionist's payment verification",
+    ok("owner sees the audit log with the secretary's payment verification",
        shows(page, "tr:has-text('Rhea Santos'):has-text('payment')"))
     page.goto(f"{BASE}/dashboard/settings")
     ok("owner can open settings", shows(page, "text=Booking rules"))

@@ -18,7 +18,7 @@ create schema if not exists private;
 -- ---------------------------------------------------------------------
 -- Enums
 -- ---------------------------------------------------------------------
-create type public.app_role as enum ('owner', 'receptionist', 'dentist', 'patient');
+create type public.app_role as enum ('owner', 'secretary', 'dentist', 'patient');
 
 create type public.resource_type as enum ('dentist', 'chair', 'room', 'equipment');
 

@@ -1,6 +1,6 @@
 /**
  * The database raises short error codes (e.g. "SLOT_UNAVAILABLE: ...").
- * This turns them into messages a patient or receptionist can act on.
+ * This turns them into messages a patient or secretary can act on.
  * Unknown errors get a generic message; the raw error is only logged on the server.
  */
 const MESSAGES: Record<string, string> = {

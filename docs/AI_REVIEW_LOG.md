@@ -5,7 +5,7 @@ SmileSlot was built with an AI coding agent (Claude). This log records real prob
 | # | Problem | How it was caught | Fix | Guard |
 |---|---|---|---|---|
 | 1 | **Trigger order bug.** A new user who signs up with an already-confirmed email got no patient record. Postgres fires triggers on the same event in **alphabetical order**, so `on_auth_user_confirmed` ran before `on_auth_user_created` had made the profile. | Database test: a confirmed patient couldn't book ("confirm your email first"). | Renamed to `on_auth_user_10_created` / `on_auth_user_20_confirmed`, with a comment explaining why. | DB test "logged-in patient always books under their own verified email" |
-| 2 | **Spoofable "verified by".** The first payment trigger stamped `verified_by` only when the status changed. A receptionist could edit a verified payment's `verified_by` to blame someone else. | Code review of the trigger. | The trigger now always copies `verified_by`/`verified_at` from the old row on update, ignoring client values. | DB test "payment records WHO verified it" |
+| 2 | **Spoofable "verified by".** The first payment trigger stamped `verified_by` only when the status changed. A secretary could edit a verified payment's `verified_by` to blame someone else. | Code review of the trigger. | The trigger now always copies `verified_by`/`verified_at` from the old row on update, ignoring client values. | DB test "payment records WHO verified it" |
 | 3 | **Called a function that didn't exist.** Walk-in bookings called an RPC `new_reference_code_public` the agent invented. | Reading the action before running it; the function wasn't in any migration. | Reference codes now come from a column default, so every insert gets one automatically. | DB test "staff walk-in booking gets an automatic SS- reference code" |
 | 4 | **Session read during prerender.** With Partial Prefetching, Next.js prerenders using cookies but forbids reading the clock. The Supabase client checks token expiry with `Date.now()`, so every signed-in page logged an error. | Server logs during the end-to-end run. | `createClient()` calls `connection()` so session reads always happen at request time. | E2E run checks the server log has zero errors |
 | 5 | **Filter injection risk.** Dashboard search text went straight into a PostgREST `or(...)` filter. A comma or parenthesis in the search box would change the filter's meaning. | Code review. | Search text is reduced to letters, numbers, spaces and `@.-` first. | Documented in SECURITY.md |
@@ -20,6 +20,6 @@ SmileSlot was built with an AI coding agent (Claude). This log records real prob
 
 ## How changes were checked
 
-- Database rules: `npm run test:db` attacks the schema as guest, two patients, two dentists, a receptionist, the owner and the service role (76 checks), including 10 simultaneous bookings for one slot.
+- Database rules: `npm run test:db` attacks the schema as guest, two patients, two dentists, a secretary, the owner and the service role (76 checks), including 10 simultaneous bookings for one slot.
 - App: typecheck, lint, 20 unit tests, production build.
 - End to end: a real browser against real Supabase Auth and PostgREST, every role (37 checks), plus screenshots reviewed at desktop and mobile widths.

@@ -22,7 +22,7 @@ const DENTIST_ALLOWED: ReservationStatus[] = ["checked_in", "in_progress", "comp
 /** Status buttons a given role should see for a reservation. */
 export function nextStatusesFor(role: AppRole, current: ReservationStatus): ReservationStatus[] {
   const next = TRANSITIONS[current].filter((s) => s !== "expired"); // expiry is automatic
-  if (role === "owner" || role === "receptionist") return next;
+  if (role === "owner" || role === "secretary") return next;
   if (role === "dentist") return next.filter((s) => DENTIST_ALLOWED.includes(s));
   return [];
 }

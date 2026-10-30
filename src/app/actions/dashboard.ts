@@ -381,7 +381,7 @@ export async function saveSettings(formData: FormData): Promise<ActionResult> {
 
 export async function setUserRole(formData: FormData): Promise<ActionResult> {
   await requireOwner();
-  const parsed = z.object({ userId: uuid, role: z.enum(["owner", "receptionist", "dentist", "patient"]), resourceId: uuid.optional().or(z.literal("")) })
+  const parsed = z.object({ userId: uuid, role: z.enum(["owner", "secretary", "dentist", "patient"]), resourceId: uuid.optional().or(z.literal("")) })
     .safeParse({ userId: formData.get("userId"), role: formData.get("role"), resourceId: formData.get("resourceId") ?? "" });
   if (!parsed.success) return { ok: false, error: "Invalid request." };
   const { userId, role, resourceId } = parsed.data;

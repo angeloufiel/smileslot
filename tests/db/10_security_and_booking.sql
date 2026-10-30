@@ -52,7 +52,7 @@ insert into auth.users (id, email, email_confirmed_at, raw_user_meta_data) value
 
 -- Promote staff (as the database admin, like a seed script would)
 update public.profiles set role = 'owner'        where id = 'a0000000-0000-4000-8000-000000000001';
-update public.profiles set role = 'receptionist' where id = 'a0000000-0000-4000-8000-000000000002';
+update public.profiles set role = 'secretary' where id = 'a0000000-0000-4000-8000-000000000002';
 update public.profiles set role = 'dentist'      where id in ('a0000000-0000-4000-8000-000000000003',
                                                               'a0000000-0000-4000-8000-000000000004');
 update public.resources set profile_id = 'a0000000-0000-4000-8000-000000000003'
@@ -236,14 +236,14 @@ reset role;
 
 -- =====================================================================
 \echo
-\echo ===== 4. Front desk (receptionist) =====
+\echo ===== 4. Front desk (secretary) =====
 set role authenticated;
 select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-000000000002","role":"authenticated"}', false) \g /dev/null
 
-select tests.ok(tests.visible('select * from public.reservations') = 3, 'receptionist sees all 3 reservations');
-select tests.ok(tests.visible('select * from public.audit_logs') = 0,   'receptionist cannot read the audit log (owner only)');
+select tests.ok(tests.visible('select * from public.reservations') = 3, 'secretary sees all 3 reservations');
+select tests.ok(tests.visible('select * from public.audit_logs') = 0,   'secretary cannot read the audit log (owner only)');
 select tests.ok(tests.visible($$select * from public.notifications where type = 'payment.submitted'$$) = 1,
-  'receptionist was notified about the GCash payment to verify');
+  'secretary was notified about the GCash payment to verify');
 
 select tests.throws(format($$insert into public.reservations (reference_code, customer_id, service_id, resource_id,
   starts_at, ends_at, blocked_until, status, source, contact_name, contact_email, contact_phone, price)
@@ -253,7 +253,7 @@ select tests.throws(format($$insert into public.reservations (reference_code, cu
   'reservations_no_overlap', 'even staff cannot double-book a dentist (database constraint)');
 
 with u as (update public.clinic_settings set name = 'Hacked' returning 1)
-select tests.ok((select count(*) from u) = 0, 'receptionist cannot change clinic settings (owner only)');
+select tests.ok((select count(*) from u) = 0, 'secretary cannot change clinic settings (owner only)');
 
 -- Verify Lia's GCash deposit → booking confirms automatically
 update public.payments set status = 'verified' where id = :'pay2';
@@ -268,7 +268,7 @@ select tests.throws(format($$update public.payments set status = 'rejected' wher
 select tests.throws(format($$update public.payments set amount = 1 where id = %L$$, :'pay2'),
   'FORBIDDEN', 'payment amount cannot be edited after submission');
 
--- Walk-in booked by the receptionist: reference code comes from the column default
+-- Walk-in booked by the secretary: reference code comes from the column default
 insert into public.reservations (customer_id, service_id, resource_id, starts_at, ends_at, blocked_until,
   status, source, contact_name, contact_email, contact_phone, price)
 select id, '20000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000002',
@@ -282,9 +282,9 @@ select tests.ok((select ends_at - starts_at = interval '45 minutes' from public.
 
 insert into public.reservation_notes (reservation_id, author_id, body)
 select id, auth.uid(), 'Patient is nervous; prefers morning.' from public.reservations where reference_code = :'ref1';
-select tests.ok(tests.visible('select * from public.reservation_notes') = 1, 'receptionist can add an internal note');
+select tests.ok(tests.visible('select * from public.reservation_notes') = 1, 'secretary can add an internal note');
 select tests.throws($$update public.profiles set role = 'owner' where id = auth.uid()$$,
-  'FORBIDDEN', 'receptionist cannot promote themselves');
+  'FORBIDDEN', 'secretary cannot promote themselves');
 reset role;
 
 -- =====================================================================
@@ -295,7 +295,7 @@ select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-0000000
 select tests.ok(tests.visible('select * from public.audit_logs') > 0, 'owner can read the audit log');
 select tests.ok(tests.visible(format($$select * from public.audit_logs where table_name = 'payments'
   and actor_id = 'a0000000-0000-4000-8000-000000000002'$$)) >= 1,
-  'audit log shows the receptionist verified the payment');
+  'audit log shows the secretary verified the payment');
 select tests.throws($$update public.profiles set role = 'patient' where id = auth.uid()$$,
   'LAST_OWNER', 'the last owner cannot demote themselves');
 select tests.throws($$delete from public.audit_logs$$, 'permission denied', 'nobody can delete audit logs');

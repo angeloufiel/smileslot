@@ -27,7 +27,7 @@ const admin = createClient<Database>(url, secret, { auth: { persistSession: fals
 
 const DEMO = [
   { email: "owner@demo.smileslot.app", fullName: "Olivia Ramos", role: "owner" as const },
-  { email: "frontdesk@demo.smileslot.app", fullName: "Rhea Santos", role: "receptionist" as const },
+  { email: "secretary@demo.smileslot.app", fullName: "Rhea Santos", role: "secretary" as const },
   { email: "dr.ana@demo.smileslot.app", fullName: "Dr. Ana Villanueva", role: "dentist" as const, resourceId: "30000000-0000-4000-8000-000000000001" },
   { email: "dr.marco@demo.smileslot.app", fullName: "Dr. Marco Dela Peña", role: "dentist" as const, resourceId: "30000000-0000-4000-8000-000000000002" },
   { email: "patient@demo.smileslot.app", fullName: "Paolo Cruz", role: "patient" as const },

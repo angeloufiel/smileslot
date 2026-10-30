@@ -38,8 +38,8 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   };
 });
 
-export const STAFF_ROLES: AppRole[] = ["owner", "receptionist", "dentist"];
-export const FRONT_DESK_ROLES: AppRole[] = ["owner", "receptionist"];
+export const STAFF_ROLES: AppRole[] = ["owner", "secretary", "dentist"];
+export const FRONT_DESK_ROLES: AppRole[] = ["owner", "secretary"];
 
 export async function requireUser(next = "/my/bookings"): Promise<CurrentUser> {
   const user = await getCurrentUser();

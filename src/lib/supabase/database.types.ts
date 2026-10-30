@@ -782,7 +782,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "owner" | "receptionist" | "dentist" | "patient"
+      app_role: "owner" | "secretary" | "dentist" | "patient"
       booking_source: "online" | "walk_in" | "phone" | "manual"
       payment_kind: "payment" | "refund"
       payment_method:
@@ -942,7 +942,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["owner", "receptionist", "dentist", "patient"],
+      app_role: ["owner", "secretary", "dentist", "patient"],
       booking_source: ["online", "walk_in", "phone", "manual"],
       payment_kind: ["payment", "refund"],
       payment_method: [

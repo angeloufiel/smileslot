@@ -2,7 +2,7 @@
 
 **Live demo:** _add your Vercel URL here_ · **Stack:** Next.js 16 (App Router), TypeScript, Supabase (Postgres, Auth, Storage, Row Level Security), Tailwind CSS 4
 
-SmileSlot replaces the usual small-clinic setup of a paper appointment book, a Facebook Messenger inbox and GCash screenshots scattered across a receptionist's phone. Patients see real open times and book in under a minute, as guests or with an account. The front desk confirms bookings, verifies GCash, Maya and bank payments, and handles walk-ins from one dashboard. Each dentist sees only their own patients.
+SmileSlot replaces the usual small-clinic setup of a paper appointment book, a Facebook Messenger inbox and GCash screenshots scattered across a secretary's phone. Patients see real open times and book in under a minute, as guests or with an account. The front desk confirms bookings, verifies GCash, Maya and bank payments, and handles walk-ins from one dashboard. Each dentist sees only their own patients.
 
 The demo runs a fictional clinic, **Harborview Dental Clinic**.
 
@@ -13,7 +13,7 @@ The demo runs a fictional clinic, **Harborview Dental Clinic**.
 | Role | Email | What to try |
 |---|---|---|
 | Guest | (no login) | Book from the homepage time buttons, then use **Find my booking** with the reference and email |
-| Receptionist | `frontdesk@demo.smileslot.app` | Verify a GCash receipt, add a walk-in, move an appointment |
+| Secretary | `secretary@demo.smileslot.app` | Verify a GCash receipt, add a walk-in, move an appointment |
 | Dentist | `dr.ana@demo.smileslot.app` | Check a patient in; try to open Dr. Marco's appointments (you can't) |
 | Owner | `owner@demo.smileslot.app` | Change booking rules, manage staff roles, read the audit log |
 | Patient | `patient@demo.smileslot.app` | My bookings |
@@ -24,7 +24,7 @@ The demo password is shared privately on request.
 
 This is enforced inside Postgres with Row Level Security, not just by hiding buttons. The app talks to the database as the signed-in user, so even a hand-crafted API request gets the same answer.
 
-| | Guest | Patient | Dentist | Receptionist | Owner |
+| | Guest | Patient | Dentist | Secretary | Owner |
 |---|---|---|---|---|---|
 | Services, prices, dentists | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Open time slots (times only, no names) | ✅ | ✅ | ✅ | ✅ | ✅ |

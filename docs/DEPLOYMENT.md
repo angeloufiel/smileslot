@@ -56,7 +56,7 @@ npm run seed:users   # creates the 5 demo logins
 npm run dev          # open http://localhost:3000
 ```
 
-Sign in as `frontdesk@demo.smileslot.app` with your demo password.
+Sign in as `secretary@demo.smileslot.app` with your demo password.
 
 ## 6. Deploy to Vercel
 

@@ -11,7 +11,7 @@
 --   anon          not logged in (guests)
 --   patient       logged-in customer: only their own records
 --   dentist       their own appointments and those patients only
---   receptionist  front desk: all operational data
+--   secretary  front desk: all operational data
 --   owner         everything, plus settings, roles and audit logs
 --
 -- (select auth.uid()) is wrapped in a sub-select so Postgres evaluates it
