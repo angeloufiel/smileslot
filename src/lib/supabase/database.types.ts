@@ -73,6 +73,7 @@ export type Database = {
           email: string | null
           id: number
           logo_path: string | null
+          logo_url: string | null
           map_url: string | null
           max_advance_days: number
           min_notice_minutes: number
@@ -96,6 +97,7 @@ export type Database = {
           email?: string | null
           id?: number
           logo_path?: string | null
+          logo_url?: string | null
           map_url?: string | null
           max_advance_days?: number
           min_notice_minutes?: number
@@ -118,6 +120,7 @@ export type Database = {
           email?: string | null
           id?: number
           logo_path?: string | null
+          logo_url?: string | null
           map_url?: string | null
           max_advance_days?: number
           min_notice_minutes?: number
@@ -755,6 +758,7 @@ export type Database = {
         Args: { p_email: string; p_reason?: string; p_reference: string }
         Returns: Database["public"]["Enums"]["reservation_status"]
       }
+      claim_booking: { Args: { p_reference: string }; Returns: string }
       get_available_slots: {
         Args: { p_date: string; p_resource_id?: string; p_service_id: string }
         Returns: {

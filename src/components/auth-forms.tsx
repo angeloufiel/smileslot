@@ -10,13 +10,14 @@ import { Alert, Button, Field, Input } from "@/components/ui";
 export function SignInForm({ next, notice }: { next?: string; notice?: string }) {
   const [state, action, pending] = useActionState(signInAction, null);
   const errors = state && !state.ok ? state.fieldErrors ?? {} : {};
+  const v = state && !state.ok ? state.values ?? {} : {};
   return (
     <form action={action} className="space-y-4" noValidate>
       {notice && <Alert tone="info">{notice}</Alert>}
       {state && !state.ok && <Alert>{state.error}</Alert>}
       <input type="hidden" name="next" value={next ?? ""} />
       <Field label="Email" name="email" error={errors.email}>
-        <Input name="email" type="email" autoComplete="email" required error={errors.email} />
+        <Input name="email" type="email" autoComplete="email" required error={errors.email} defaultValue={v.email} />
       </Field>
       <Field label="Password" name="password" error={errors.password}>
         <Input name="password" type="password" autoComplete="current-password" required error={errors.password} />
@@ -32,26 +33,27 @@ export function SignInForm({ next, notice }: { next?: string; notice?: string })
 
 export function SignUpForm() {
   const [state, action, pending] = useActionState(signUpAction, null);
-  if (state?.ok) return <Alert tone="success">{state.message}</Alert>;
+  if (state?.ok) return <Alert tone="success">{state.message} <Link href="/login" className="font-semibold underline">Sign in</Link></Alert>;
   const errors = state && !state.ok ? state.fieldErrors ?? {} : {};
+  const v = state && !state.ok ? state.values ?? {} : {};
   return (
     <form action={action} className="space-y-4" noValidate>
       {state && !state.ok && <Alert>{state.error}</Alert>}
       <Field label="Full name" name="fullName" error={errors.fullName}>
-        <Input name="fullName" autoComplete="name" required error={errors.fullName} />
+        <Input name="fullName" autoComplete="name" required error={errors.fullName} defaultValue={v.fullName} />
       </Field>
       <Field label="Mobile number" name="phone" error={errors.phone}>
-        <Input name="phone" type="tel" autoComplete="tel" required error={errors.phone} />
+        <Input name="phone" type="tel" autoComplete="tel" required error={errors.phone} defaultValue={v.phone} />
       </Field>
       <Field label="Email" name="email" error={errors.email}>
-        <Input name="email" type="email" autoComplete="email" required error={errors.email} />
+        <Input name="email" type="email" autoComplete="email" required error={errors.email} defaultValue={v.email} />
       </Field>
       <Field label="Password" name="password" error={errors.password} hint="At least 10 characters">
         <Input name="password" type="password" autoComplete="new-password" required error={errors.password} />
       </Field>
       <Button type="submit" disabled={pending} className="w-full">{pending ? "Creating account…" : "Create account"}</Button>
       <p className="text-sm text-muted">
-        Bookings you made as a guest with the same email appear in your account after you confirm your email.
+        You can sign in right away. Booked before as a guest? Add those bookings in My bookings with your booking number.
       </p>
     </form>
   );

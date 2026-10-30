@@ -67,7 +67,10 @@ with sync_playwright() as p:
     # ---------- 1. Guest books from the hero ----------
     page.goto(BASE)
     chips = page.locator("a[href*='&start=']")   # hero time buttons only (service links have no start time)
+    ok("home shows the 4 service photos", shows(page, "#care-title") and page.locator("section:has(#care-title) img").count() == 4)
     ok("home shows live open-time chips", shows(page, "a[href*='&start=']") and chips.count() >= 3)
+    page.locator("#care-title").scroll_into_view_if_needed()
+    page.wait_for_function("[...document.querySelectorAll('section:has(#care-title) img')].every(i => i.complete && i.naturalWidth > 0)", timeout=15000)
     page.screenshot(path=f"{SHOTS}/01-home.png", full_page=True)
     chips.nth(1).click()   # second chip: the first can drop inside the minimum-notice window while the test runs
     page.wait_for_url(re.compile(r"/book\?"))
@@ -167,7 +170,7 @@ with sync_playwright() as p:
     page.fill("textarea[name=body]", "Prefers afternoon appointments.")
     page.click("button:has-text('Add note')")
     page.wait_for_selector("text=Note added.")
-    ok("staff note added", page.locator("text=Prefers afternoon appointments.").count() == 1)
+    ok("staff note added", shows(page, "main:visible >> text=Prefers afternoon appointments."))
     lia_url = page.url
     page.screenshot(path=f"{SHOTS}/07-reservation-detail.png", full_page=True)
 
@@ -326,7 +329,41 @@ with sync_playwright() as p:
     page.click("dialog[open] >> button:has-text('Save changes')")
     ok("owner renamed the dentist", shows(page, "li:has-text('Dr. Liza M. Mercado')"))
     ok("the dentist's calendar was renamed too", page.locator(f"li:has-text('{new_email}') >> text=calendar: Dr. Liza M. Mercado").count() == 1)
+    ok("patients are not listed under staff", page.locator("text=patient@demo.smileslot.app").count() == 0)
+
+    # Forgotten password: the owner makes a new one for Dr. Ana.
+    page.click("li:has-text('dr.ana@demo.smileslot.app') >> button:has-text('Edit')")
+    page.click("dialog[open] >> button:has-text('Make a new password')")
+    page.click("dialog[open] >> button:has-text('Make new password')")
+    ok("owner made a new password for Dr. Ana", shows(page, "dialog[open] >> text=New password made"))
+    ana_pw = page.locator("dialog[open] dd.font-mono").inner_text().strip()
+    page.click("dialog[open] >> button:has-text('Done')")
+
+    # Rename the clinic and upload a logo.
+    page.fill("input[name=name]", "Harbor Dental Care")
+    page.click("button:has-text('Save settings')")
+    ok("clinic settings saved", shows(page, "text=Settings saved."))
+    page.goto(f"{BASE}/dashboard/settings")
+    ok("the new clinic name shows in the dashboard menu", shows(page, "nav >> text=Harbor Dental Care") or shows(page, "a:has-text('Harbor Dental Care')"))
+    page.set_input_files("input[name=logo]", RECEIPT)
+    page.click("button:has-text('Save logo')")
+    ok("logo uploaded", shows(page, "text=Logo updated."))
+    page.screenshot(path=f"{SHOTS}/11c-logo-and-name.png")
+    page.goto(BASE)
+    ok("public header shows the new name", shows(page, "header >> text=Harbor Dental Care"))
+    logo = page.locator("header img").first
+    ok("public header shows the uploaded logo", logo.count() == 1 and "/branding/" in (logo.get_attribute("src") or "")
+       and page.evaluate("(img) => img.complete && img.naturalWidth > 0", logo.element_handle()))
+    page.goto(f"{BASE}/dashboard/patients?accounts=1")
+    ok("Patients page lists people who signed up online", shows(page, "text=Paolo Cruz"))
+    page.goto(f"{BASE}/dashboard/settings")
     ok("Rhea is still a secretary", page.locator("li:has-text('secretary@demo.smileslot.app') span.rounded-full", has_text=re.compile(r"^Secretary$")).count() == 1)
+    logout(ctx)
+
+    login_pw = lambda email, pw: (page.goto(f"{BASE}/login"), page.fill("input[name=email]", email),
+                                  page.fill("input[name=password]", pw), page.click("button[type=submit]"))
+    login_pw("dr.ana@demo.smileslot.app", ana_pw)
+    ok("Dr. Ana signs in with the new password", left(page, "/login"))
     logout(ctx)
 
     # The new dentist signs in with the temporary password and changes it.
@@ -356,6 +393,35 @@ with sync_playwright() as p:
     page.goto(f"{BASE}/dashboard")
     ok("patient is kept out of the dashboard", left(page, "/dashboard"))
     logout(ctx)
+
+    # ---------- 6b. A new patient signs up and can use the account at once ----------
+    page.goto(f"{BASE}/signup")
+    page.fill("input[name=fullName]", "Juan Dela Cruz")
+    page.fill("input[name=phone]", "0917 555 1234")
+    page.fill("input[name=email]", "juan.guest@example.com")
+    page.fill("input[name=password]", "juan-password-123")
+    page.click("button:has-text('Create account')")
+    ok("sign-up goes straight to My bookings (no email to confirm)", shows(page, "text=Your account is ready"))
+    ok("guest bookings with the same email are NOT added automatically", page.locator(f"text=Booking no. {ref1}").count() == 0)
+    page.fill("input[name=reference]", "1111-1111")
+    page.click("button:has-text('Add booking')")
+    ok("a wrong booking number adds nothing", shows(page, "text=No booking with that number"))
+    page.fill("input[name=reference]", ref1)
+    page.click("button:has-text('Add booking')")
+    ok("patient adds their old guest booking with its number", shows(page, f"text=Booking no. {ref1}"))
+    ok("My bookings shows the service photos", page.locator("section:has(#care-title) img").count() == 4)
+    page.screenshot(path=f"{SHOTS}/12a-my-bookings.png", full_page=True)
+    logout(ctx)
+    page.goto(f"{BASE}/signup")
+    page.fill("input[name=fullName]", "Someone Else")
+    page.fill("input[name=phone]", "0917 555 0000")
+    page.fill("input[name=email]", "juan.guest@example.com")
+    page.fill("input[name=password]", "other-password-123")
+    page.click("button:has-text('Create account')")
+    ok("the same email can't sign up twice", shows(page, "text=already an account with this email"))
+    ok("the form keeps what was typed after an error", page.input_value("input[name=fullName]") == "Someone Else"
+       and page.input_value("input[name=email]") == "juan.guest@example.com")
+    page.screenshot(path=f"{SHOTS}/12b-signup.png", full_page=True)
 
     # ---------- 7. Mobile ----------
     m = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True).new_page()

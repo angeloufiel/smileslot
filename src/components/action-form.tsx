@@ -33,8 +33,8 @@ export function ActionForm({
         })
       }
     >
-      {result && !result.ok && <div className="mb-3"><Alert>{result.error}</Alert></div>}
-      {result?.ok && result.message && <div className="mb-3"><Alert tone="success">{result.message}</Alert></div>}
+      {result && !result.ok && <div className="col-span-full mb-3"><Alert>{result.error}</Alert></div>}
+      {result?.ok && result.message && <div className="col-span-full mb-3"><Alert tone="success">{result.message}</Alert></div>}
       {children({ pending, errors: result && !result.ok ? result.fieldErrors ?? {} : {} })}
     </form>
   );

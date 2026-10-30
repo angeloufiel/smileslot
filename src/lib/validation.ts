@@ -28,7 +28,7 @@ export const lookupSchema = z.object({
   email: z.email("Enter the email you booked with."),
 });
 
-export const MAX_PROOF_BYTES = 5 * 1024 * 1024;
+export const MAX_PROOF_BYTES = 4 * 1024 * 1024; // Vercel accepts at most 4.5 MB per request
 export const PROOF_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"] as const;
 
 export const paymentSchema = lookupSchema.extend({

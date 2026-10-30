@@ -132,6 +132,10 @@ Pending bookings whose deposit hold has expired don't block a slot, even before 
 
 `book_appointment()` re-checks that the requested time is one the engine would offer, then inserts. If another request won the slot a moment earlier, the exclusion constraint rejects the insert and the patient sees "That time was just taken."
 
+## Guest and account records
+
+`customers.email` is unique only among guest records (`profile_id is null`). An account always has its own record, so typing someone's email as a guest never adds a booking to their account, and signing up never adopts someone's guest bookings. A patient adds an old guest booking with `claim_booking(booking number)`.
+
 ## Booking status flow
 
 ```mermaid

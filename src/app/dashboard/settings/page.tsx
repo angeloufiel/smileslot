@@ -3,7 +3,7 @@ import { Badge, PageHeader, Panel, Skeleton } from "@/components/ui";
 import { requireOwner } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { humanize } from "@/lib/format";
-import { AddStaffButton, EditPersonButton, SettingsForm, type Person } from "./forms";
+import { AddStaffButton, EditPersonButton, LogoForm, SettingsForm, type Person } from "./forms";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { AppRole } from "@/lib/types";
 
@@ -42,7 +42,7 @@ async function Settings() {
   const supabase = await createClient();
   const [{ data: settings }, { data: people }, { data: calendars }, emails] = await Promise.all([
     supabase.from("clinic_settings").select("*").eq("id", 1).single(),
-    supabase.from("profiles").select("id, full_name, role, is_active").order("full_name").limit(500),
+    supabase.from("profiles").select("id, full_name, role, is_active").neq("role", "patient").order("full_name").limit(200),
     supabase.from("resources").select("id, name, title, profile_id").eq("type", "dentist").order("name"),
     loginEmails(),
   ]);
@@ -54,8 +54,7 @@ async function Settings() {
       return { id: p.id, full_name: p.full_name, role: p.role, email: emails.get(p.id) ?? "", calendarId: c?.id ?? null, calendarTitle: c?.title ?? null };
     })
     .sort((a, b) => ORDER[a.role] - ORDER[b.role] || a.full_name.localeCompare(b.full_name));
-  const staff = all.filter((p) => p.role !== "patient");
-  const patients = all.filter((p) => p.role === "patient");
+  const staff = all; // patients sign up on their own; they're listed on the Patients page, not here
   const calendarOptions = cal.map(({ id, name, profile_id }) => ({ id, name, profile_id }));
 
   return (
@@ -64,21 +63,25 @@ async function Settings() {
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold">Staff</h2>
-            <p className="text-sm text-muted">Add doctors and secretaries, fix a name, or change what someone can do.</p>
+            <p className="text-sm text-muted">Add doctors and secretaries, fix a name or sign-in email, make a new password, or change what someone can do.</p>
           </div>
           <AddStaffButton calendars={calendarOptions} />
         </div>
         <PeopleList people={staff} ownerId={owner.id} calendars={calendarOptions} />
-        {patients.length > 0 && (
-          <details className="mt-6 border-t border-line pt-4">
-            <summary className="cursor-pointer text-sm font-semibold text-cobalt">Patient accounts ({patients.length})</summary>
-            <p className="mt-2 text-sm text-muted">Someone who signed up as a patient can be made staff with Edit.</p>
-            <div className="mt-2"><PeopleList people={patients} ownerId={owner.id} calendars={calendarOptions} /></div>
-          </details>
-        )}
+        <p className="mt-4 border-t border-line pt-4 text-sm text-muted">
+          Patients create their own accounts on the website. See them on the{" "}
+          <a href="/dashboard/patients?accounts=1" className="font-semibold text-cobalt hover:underline">Patients</a> page.
+          If a patient should become staff, press “Add staff member” and use their email.
+        </p>
       </Panel>
 
-      {settings && <Panel><h2 className="mb-4 text-lg font-bold">Clinic</h2><SettingsForm s={settings} /></Panel>}
+      {settings && (
+        <Panel>
+          <h2 className="mb-4 text-lg font-bold">Clinic</h2>
+          <div className="mb-6 border-b border-line pb-6"><LogoForm logoUrl={settings.logo_url} clinicName={settings.name} /></div>
+          <SettingsForm s={settings} />
+        </Panel>
+      )}
     </div>
   );
 }

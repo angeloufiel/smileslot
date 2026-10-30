@@ -15,6 +15,13 @@ http.createServer((req, res) => {
   const url = new URL(req.url, "http://x");
   if (url.pathname.startsWith("/auth/v1")) return proxy(req, res, 9999, req.url.replace("/auth/v1", "") || "/");
   if (url.pathname.startsWith("/rest/v1")) return proxy(req, res, 3001, req.url.replace("/rest/v1", "") || "/");
+  // Public buckets (the clinic logo) are readable by anyone, like real Supabase Storage.
+  const pub = url.pathname.match(/^\/storage\/v1\/object\/public\/(branding)\/(.+)$/);
+  if (pub && req.method === "GET") {
+    const f = files.get(`${pub[1]}/${decodeURIComponent(pub[2])}`);
+    if (!f) return send(res, 404, { message: "Object not found" });
+    res.writeHead(200, { "content-type": f.type }); return res.end(f.data);
+  }
   if (url.pathname.startsWith("/storage/v1")) {
     const role = (() => { try { return JSON.parse(Buffer.from((req.headers.authorization || "").split(".")[1] || "", "base64url")).role; } catch { return null; } })();
     if (role !== "service_role") return send(res, 403, { message: "only service_role in this emulator" });

@@ -65,6 +65,13 @@ export function TrackBooking({ initialReference, paymentInstructions }: { initia
     formData.set("reference", booking.reference);
     formData.set("email", booking.email);
     setError(null); setFieldErrors({});
+    const proof = formData.get("proof");
+    if (proof instanceof File && proof.size > 4 * 1024 * 1024) {
+      // Checked here too: a file over the server's upload limit would never reach the server.
+      setError("The file is larger than 4 MB. Send a screenshot instead of a photo of the screen.");
+      setFieldErrors({ proof: "Max 4 MB." });
+      return;
+    }
     start(async () => {
       const result = await submitPaymentAction(formData);
       if (result.ok) { setBooking(result.data); setNotice(result.message ?? null); }
@@ -144,7 +151,7 @@ export function TrackBooking({ initialReference, paymentInstructions }: { initia
             <Field label="Receipt reference number" name="referenceNo" error={fieldErrors.referenceNo}>
               <Input name="referenceNo" required placeholder="e.g. 1009 876 5432" error={fieldErrors.referenceNo} />
             </Field>
-            <Field label="Receipt screenshot or PDF" name="proof" error={fieldErrors.proof} hint="JPG, PNG, WebP or PDF, up to 5 MB">
+            <Field label="Receipt screenshot or PDF" name="proof" error={fieldErrors.proof} hint="JPG, PNG, WebP or PDF, up to 4 MB">
               <input id="proof" name="proof" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-cobalt-soft file:px-3 file:py-2 file:font-semibold file:text-cobalt-dark" />
             </Field>
             <div className="sm:col-span-2">

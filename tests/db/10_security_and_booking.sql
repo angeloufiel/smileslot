@@ -274,7 +274,7 @@ insert into public.reservations (customer_id, service_id, resource_id, starts_at
 select id, '20000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000002',
   (:'d'::date + time '15:00') at time zone 'Asia/Manila', now(), now(), 'confirmed', 'walk_in',
   'Walk In', 'walkin@x.local', '09170001111', 1000
-from public.customers where lower(email) = 'juan@guest.local';
+from public.customers where lower(email) = 'juan@guest.local' and profile_id is null;
 select tests.ok((select reference_code ~ '^[1-9][0-9]{7}$' from public.reservations where contact_email = 'walkin@x.local'),
   'staff walk-in booking gets an automatic 8-digit booking number');
 select tests.ok((select ends_at - starts_at = interval '45 minutes' from public.reservations where contact_email = 'walkin@x.local'),
@@ -333,14 +333,27 @@ select tests.ok(private.expire_pending_reservations() = 1, 'expiry job expires t
 select tests.ok((select status from public.reservations where contact_email = 'late@x.local') = 'expired',
   'unpaid booking is now expired');
 
--- Someone signs up with juan@guest.local but has NOT confirmed the email yet
+-- Someone signs up with juan@guest.local. Sign-up is instant (no email proof), so the
+-- new account must NOT see Juan's guest bookings until it proves it has the booking number.
 insert into auth.users (id, email, email_confirmed_at) values
-  ('a0000000-0000-4000-8000-000000000009', 'juan@guest.local', null);
-select tests.ok((select profile_id from public.customers where lower(email) = 'juan@guest.local') is null,
-  'unconfirmed signup does NOT get access to the guest''s past bookings');
-update auth.users set email_confirmed_at = now() where id = 'a0000000-0000-4000-8000-000000000009';
-select tests.ok((select profile_id from public.customers where lower(email) = 'juan@guest.local')
-  = 'a0000000-0000-4000-8000-000000000009', 'after confirming the email, past guest bookings are linked');
+  ('a0000000-0000-4000-8000-000000000009', 'juan@guest.local', now());
+select tests.ok((select count(*) from public.customers where lower(email) = 'juan@guest.local' and profile_id is null) = 1,
+  'a new account with a guest''s email does NOT take over the guest''s bookings');
+select tests.ok((select count(*) from public.customers where profile_id = 'a0000000-0000-4000-8000-000000000009') = 1,
+  'the new account gets its own patient record and can sign in right away');
+
+set role authenticated;
+select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-000000000009","role":"authenticated"}', false) \g /dev/null
+select tests.ok((select count(*) from public.reservations where contact_email = 'juan@guest.local') = 0,
+  'before claiming, the account sees none of the guest bookings');
+select tests.throws('select public.claim_booking(''11111111'')', 'BOOKING_NOT_FOUND', 'a wrong booking number claims nothing');
+select tests.throws(format('select public.claim_booking(%L)', :'ref2'), 'BOOKING_NOT_FOUND',
+  'cannot claim a booking made with a different email');
+select tests.ok(public.claim_booking(private.format_ref(:'ref1')) = :'ref1',
+  'patient adds their old guest booking with the booking number (dash allowed)');
+select tests.ok((select count(*) from public.reservations where reference_code = :'ref1') = 1,
+  'after claiming, the booking shows in the account');
+reset role;
 
 -- Server-side admin code (service role) can create bookings too: the reference default must work for it
 set role service_role;
@@ -348,7 +361,7 @@ insert into public.reservations (customer_id, service_id, resource_id, starts_at
   status, contact_name, contact_email, contact_phone, price)
 select id, '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000002',
   (:'d'::date + time '17:00') at time zone 'Asia/Manila', now(), now(), 'confirmed', 'Admin Insert', 'admin@x.local', '09170003333', 500
-from public.customers where lower(email) = 'juan@guest.local';
+from public.customers where lower(email) = 'juan@guest.local' and profile_id is null;
 select tests.ok((select reference_code ~ '^[1-9][0-9]{7}$' from public.reservations where contact_email = 'admin@x.local'),
   'service role inserts get a reference code (seed scripts, admin tools)');
 reset role;

@@ -21,7 +21,7 @@ In a terminal inside the project folder:
 npm install
 npx supabase login
 npx supabase link --project-ref YOUR-PROJECT-REF      # the part before .supabase.co
-npx supabase db push --include-seed                   # runs all migrations + the demo clinic data
+npx supabase db push --include-seed                   # runs all migrations + starter clinic data (rename it in Settings)
 ```
 
 Check in the Supabase dashboard:

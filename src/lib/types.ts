@@ -17,4 +17,4 @@ export type ClinicSettings = Tables["clinic_settings"]["Row"];
 /** Result type returned by every Server Action, so forms can show errors inline. */
 export type ActionResult<T = undefined> =
   | { ok: true; data: T; message?: string }
-  | { ok: false; error: string; fieldErrors?: Record<string, string> };
+  | { ok: false; error: string; fieldErrors?: Record<string, string>; values?: Record<string, string> };

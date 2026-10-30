@@ -4,7 +4,7 @@ import { publicEnv } from "@/lib/env";
 
 /**
  * Transactional email through Resend's HTTP API.
- * If RESEND_API_KEY is not set (local development, demo), emails are logged
+ * If RESEND_API_KEY is not set (local development), emails are logged
  * instead of sent, and the app keeps working. Email failures never block a
  * booking: the in-app notification and the database record are the source of truth.
  */

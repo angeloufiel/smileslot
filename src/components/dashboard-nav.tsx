@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { signOutAction } from "@/app/actions/auth";
-import { ToothMark } from "@/components/site-header";
+import { Brand } from "@/components/brand";
 import { NavLinks, type NavItem } from "@/components/nav-links";
 import { isFrontDesk, requireStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -33,8 +33,8 @@ export async function DashboardNav() {
 
   return (
     <div className="flex h-full flex-col gap-4">
-      <Link href="/dashboard" className="flex items-center gap-2.5 px-2 font-display text-lg font-bold">
-        <ToothMark /> Harborview
+      <Link href="/dashboard" className="flex min-w-0 items-center gap-2.5 px-2 font-display text-lg font-bold">
+        <Brand />
       </Link>
       <NavLinks items={items} />
       <div className="mt-auto hidden border-t border-line px-2 pt-4 text-sm lg:block">

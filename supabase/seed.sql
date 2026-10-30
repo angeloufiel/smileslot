@@ -1,5 +1,6 @@
 -- =====================================================================
--- Demo catalog for a FICTIONAL clinic. Safe to run on a fresh database.
+-- Starter catalog (services, two dentist calendars, hours, PH holidays). Safe to run on a fresh database.
+-- Everything here can be renamed or replaced from the dashboard.
 -- Demo login accounts are created separately by scripts/seed-demo-users.ts
 -- (through the Supabase Admin API, so passwords are hashed by Supabase).
 -- =====================================================================

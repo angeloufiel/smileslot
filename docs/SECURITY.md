@@ -84,7 +84,18 @@ A guest proves ownership of a booking with **reference number + email**:
 - Lookups need both values to match. The error message is the same whether the reference or the email was wrong, so it doesn't reveal which bookings exist.
 - Only the reference ever appears in a URL. The email stays out of links, logs and browser history.
 
-When a guest later creates an account with the same email, their old bookings are linked **only after the email is confirmed**. Otherwise anyone could sign up with someone else's email and see their appointments. A test covers exactly this case.
+Patients can sign in right after creating an account (no confirmation email), because many patients never finish an email step. That means the email on a new account is **not proven**, so:
+
+- a new account never takes over guest bookings made with the same email (guests and accounts have separate customer records; the email is unique only among guest records);
+- to add an old guest booking, the patient enters its **booking number** on My bookings. `claim_booking()` moves it only if the booking was made with the account's email and still belongs to a guest record, never to another account.
+
+So seeing a booking needs both the email and the booking number, exactly as on the public "Find my booking" page. DB tests cover a wrong number, a booking made with another email, and the successful claim.
+
+Sign-up uses the Admin API (`email_confirm: true`), so it works whatever the Supabase "Confirm email" setting is. Trade-off: Supabase's own sign-up rate limit doesn't apply to that call, so a bot could create many accounts; add a CAPTCHA (Supabase supports Turnstile/hCaptcha) before heavy public use.
+
+## Clinic logo
+
+The `branding` bucket is **public** (a logo must load on public pages) and has **no write policies**: the browser can't upload to it. Only the owner's server action uploads, after checking the role, the size (1 MB) and the real file type from the first bytes (PNG or JPEG only, so no SVG with scripts).
 
 ## Other measures
 

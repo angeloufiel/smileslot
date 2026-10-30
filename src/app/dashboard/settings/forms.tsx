@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { addStaff, saveSettings, updateStaff, type NewStaff } from "@/app/actions/dashboard";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { addStaff, removeLogo, resetStaffPassword, saveSettings, updateStaff, uploadLogo, type NewStaff } from "@/app/actions/dashboard";
 import { ActionForm } from "@/components/action-form";
-import { Dialog } from "@/components/dialog";
-import { Alert, Button, Field, Input, Select, Textarea, cx } from "@/components/ui";
+import { ConfirmDialog, Dialog } from "@/components/dialog";
+import { Alert, Button, ButtonLink, Field, Input, Select, Textarea, cx } from "@/components/ui";
 import { humanize } from "@/lib/format";
 import type { ActionResult, AppRole, ClinicSettings } from "@/lib/types";
 
@@ -49,7 +49,7 @@ const ROLE_HELP: Record<AppRole, string> = {
   owner: "Everything, including settings, staff and the audit log.",
   secretary: "Front desk: bookings, payments, patients, services and schedule.",
   dentist: "Sees their own appointments and can close their own time.",
-  patient: "No dashboard access. Can book and see their own bookings.",
+  patient: "They can no longer open the dashboard. Their account stays, as a patient account.",
 };
 
 function RoleAndCalendar({
@@ -73,7 +73,7 @@ function RoleAndCalendar({
             )}>
               <input type="radio" name="role" value={r} checked={role === r} disabled={lockOwner && r !== "owner"}
                 onChange={() => setRole(r)} className="mt-1 h-4 w-4 accent-cobalt" />
-              <span><span className="block font-semibold">{humanize(r)}</span><span className="block text-sm text-muted">{ROLE_HELP[r]}</span></span>
+              <span><span className="block font-semibold">{r === "patient" ? "Remove staff access" : humanize(r)}</span><span className="block text-sm text-muted">{ROLE_HELP[r]}</span></span>
             </label>
           ))}
         </div>
@@ -101,13 +101,11 @@ export function AddStaffButton({ calendars }: { calendars: Calendar[] }) {
   const [calendar, setCalendar] = useState("new");
   const [pending, start] = useTransition();
   const [result, setResult] = useState<ActionResult<NewStaff> | null>(null);
-  const [copied, setCopied] = useState(false);
 
   function close() {
     if (pending) return;
     setOpen(false);
     setResult(null);
-    setCopied(false);
     setRole("dentist");
     setCalendar("new");
   }
@@ -117,22 +115,9 @@ export function AddStaffButton({ calendars }: { calendars: Calendar[] }) {
   return (
     <>
       <Button onClick={() => setOpen(true)}>+ Add staff member</Button>
-      <Dialog open={open} onClose={close} title={done ? "Account created" : "Add a staff member"} wide>
+      <Dialog open={open} onClose={close} title={done ? (done.password ? "Account created" : "Added to staff") : "Add a staff member"} wide>
         {done ? (
-          <div className="space-y-4">
-            <p>Give these sign-in details to <strong>{done.name}</strong>. They should change the password in <em>My account</em> after signing in.</p>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-[var(--radius-control)] bg-canvas p-4 ring-1 ring-line">
-              <dt className="text-muted">Email</dt><dd className="font-semibold break-all">{done.email}</dd>
-              <dt className="text-muted">Password</dt><dd className="font-mono text-lg font-bold tracking-wider">{done.password}</dd>
-            </dl>
-            <Alert tone="warning">This password is shown only once. Copy it now.</Alert>
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="secondary" onClick={async () => {
-                try { await navigator.clipboard.writeText(`Email: ${done.email}\nPassword: ${done.password}`); setCopied(true); } catch { setCopied(false); }
-              }}>{copied ? "Copied" : "Copy details"}</Button>
-              <Button onClick={close}>Done</Button>
-            </div>
-          </div>
+          <Credentials creds={done} onDone={close} />
         ) : (
           <form
             noValidate
@@ -164,11 +149,16 @@ export function EditPersonButton({ person, calendars, isSelf }: { person: Person
   const [calendar, setCalendar] = useState(person.calendarId ?? "");
   const [pending, start] = useTransition();
   const [result, setResult] = useState<ActionResult | null>(null);
+  const [creds, setCreds] = useState<NewStaff | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [askReset, setAskReset] = useState(false);
 
   function close() {
     if (pending) return;
     setOpen(false);
     setResult(null);
+    setCreds(null);
+    setResetError(null);
     setRole(person.role);
     setCalendar(person.calendarId ?? "");
   }
@@ -177,7 +167,8 @@ export function EditPersonButton({ person, calendars, isSelf }: { person: Person
   return (
     <>
       <Button variant="secondary" className="min-h-9 px-3 text-sm" onClick={() => setOpen(true)}>Edit</Button>
-      <Dialog open={open} onClose={close} title={`Edit ${person.full_name || person.email}`} wide>
+      <Dialog open={open} onClose={close} title={creds ? "New password made" : `Edit ${person.full_name || person.email}`} wide>
+        {creds ? <Credentials creds={creds} onDone={close} /> : (
         <form
           noValidate
           className="space-y-4"
@@ -192,12 +183,28 @@ export function EditPersonButton({ person, calendars, isSelf }: { person: Person
           <Field label="Full name" name="fullName" error={errors.fullName}>
             <Input name="fullName" defaultValue={person.full_name} required error={errors.fullName} autoComplete="off" />
           </Field>
-          <p className="text-sm text-muted">Email: {person.email || "unknown"}</p>
+          <div className="rounded-[var(--radius-control)] bg-canvas p-4 ring-1 ring-line">
+            <p className="mb-3 font-semibold">Sign-in details</p>
+            <Field label="Email (their username)" name="email" error={errors.email}>
+              <Input name="email" type="email" defaultValue={person.email} required error={errors.email} autoComplete="off" />
+            </Field>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-muted">Passwords are stored scrambled, so nobody can look them up. Make a new one if they forgot it.</p>
+              {isSelf ? (
+                <ButtonLink href="/dashboard/account" variant="secondary" className="min-h-9 px-3 text-sm">Change mine</ButtonLink>
+              ) : (
+                <Button type="button" variant="secondary" className="min-h-9 px-3 text-sm" onClick={() => setAskReset(true)}>Make a new password</Button>
+              )}
+            </div>
+            {resetError && <div className="mt-3"><Alert>{resetError}</Alert></div>}
+          </div>
           <RoleAndCalendar role={role} setRole={setRole} calendar={calendar} setCalendar={setCalendar} calendars={calendars}
             personId={person.id} errors={errors} title={person.calendarTitle ?? ""} allowPatient lockOwner={isSelf} />
           {role !== person.role && (
             <Alert tone="warning">
-              {person.full_name || "This person"} will change from {humanize(person.role)} to {humanize(role)}.
+              {role === "patient"
+                ? `${person.full_name || "This person"} will no longer be staff.`
+                : `${person.full_name || "This person"} will change from ${humanize(person.role)} to ${humanize(role)}.`}
               {role === "patient" && " They will lose access to the dashboard."}
             </Alert>
           )}
@@ -206,7 +213,142 @@ export function EditPersonButton({ person, calendars, isSelf }: { person: Person
             <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save changes"}</Button>
           </div>
         </form>
+        )}
       </Dialog>
+      <ConfirmDialog
+        open={askReset}
+        onClose={() => setAskReset(false)}
+        title={`Make a new password for ${person.full_name || person.email}?`}
+        message="Their old password stops working right away. You'll see the new one once, to give to them."
+        confirmLabel="Make new password"
+        onConfirm={async () => {
+          const r = await resetStaffPassword(person.id);
+          if (!r.ok) { setResetError(r.error); return r.error; }
+          setCreds(r.data);
+          return null;
+        }}
+      />
     </>
+  );
+}
+
+/** One-time display of sign-in details (new account or new password). */
+function Credentials({ creds, onDone }: { creds: NewStaff; onDone: () => void }) {
+  const [copied, setCopied] = useState(false);
+  if (!creds.password) {
+    return (
+      <div className="space-y-4">
+        <p><strong>{creds.name}</strong> already had an account with <strong>{creds.email}</strong>, so it is now a staff account.</p>
+        <p className="text-muted">They sign in with the email and the password they already use. If they forgot it, press Edit next to their name and make a new password.</p>
+        <div className="flex justify-end"><Button onClick={onDone}>Done</Button></div>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-4">
+      <p>Give these sign-in details to <strong>{creds.name}</strong>. They should change the password in <em>My account</em> after signing in.</p>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-[var(--radius-control)] bg-canvas p-4 ring-1 ring-line">
+        <dt className="text-muted">Email</dt><dd className="font-semibold break-all">{creds.email}</dd>
+        <dt className="text-muted">Password</dt><dd className="font-mono text-lg font-bold tracking-wider">{creds.password}</dd>
+      </dl>
+      <Alert tone="warning">This password is shown only once. Copy it now.</Alert>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button variant="secondary" onClick={async () => {
+          try { await navigator.clipboard.writeText(`Email: ${creds.email}\nPassword: ${creds.password}`); setCopied(true); } catch { setCopied(false); }
+        }}>{copied ? "Copied" : "Copy details"}</Button>
+        <Button onClick={onDone}>Done</Button>
+      </div>
+    </div>
+  );
+}
+
+/** Square logo picker: click the box, choose a PNG or JPEG, see it right away, then save. */
+export function LogoForm({ logoUrl, clinicName }: { logoUrl: string | null; clinicName: string }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [pending, start] = useTransition();
+  const [result, setResult] = useState<ActionResult | null>(null);
+  const [askRemove, setAskRemove] = useState(false);
+
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+
+  function choose(f: File | undefined) {
+    setResult(null);
+    if (!f) return;
+    if (!["image/png", "image/jpeg"].includes(f.type)) {
+      setResult({ ok: false, error: "Only PNG or JPEG images can be used as a logo." });
+      return;
+    }
+    if (f.size > 1024 * 1024) {
+      setResult({ ok: false, error: "The logo must be 1 MB or smaller." });
+      return;
+    }
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
+  }
+
+  function save() {
+    if (!file) return;
+    const fd = new FormData();
+    fd.set("logo", file);
+    start(async () => {
+      const r = await uploadLogo(fd);
+      setResult(r);
+      if (r.ok) { setFile(null); setPreview(null); if (inputRef.current) inputRef.current.value = ""; }
+    });
+  }
+
+  const shown = preview ?? logoUrl;
+  return (
+    <div className="flex flex-wrap items-center gap-5">
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        className="group relative grid h-28 w-28 shrink-0 place-items-center overflow-hidden rounded-[var(--radius-control)] border-2 border-dashed border-line bg-canvas text-center hover:border-cobalt focus-visible:border-cobalt"
+        aria-label={shown ? "Change the clinic logo" : "Upload a clinic logo"}
+      >
+        {shown ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={shown} alt={`${clinicName} logo`} className="h-full w-full object-contain p-2" />
+        ) : (
+          <span className="px-2 text-xs text-muted">
+            <svg aria-hidden viewBox="0 0 24 24" className="mx-auto mb-1 h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></svg>
+            Upload logo
+          </span>
+        )}
+        {shown && <span className="absolute inset-x-0 bottom-0 bg-ink/70 py-1 text-xs text-white opacity-0 group-hover:opacity-100">Change</span>}
+      </button>
+      <input ref={inputRef} type="file" name="logo" accept="image/png,image/jpeg" className="sr-only" tabIndex={-1}
+        onChange={(e) => choose(e.target.files?.[0])} />
+      <div className="min-w-0 flex-1 space-y-2">
+        <p className="font-semibold">Clinic logo</p>
+        <p className="text-sm text-muted">PNG or JPEG, up to 1 MB. A square image looks best. It appears in the website header, the dashboard and the sign-in page.</p>
+        <div className="flex flex-wrap gap-2">
+          {file ? (
+            <>
+              <Button type="button" onClick={save} disabled={pending}>{pending ? "Uploading…" : "Save logo"}</Button>
+              <Button type="button" variant="secondary" disabled={pending}
+                onClick={() => { setFile(null); setPreview(null); if (inputRef.current) inputRef.current.value = ""; }}>Cancel</Button>
+            </>
+          ) : (
+            <>
+              <Button type="button" variant="secondary" onClick={() => inputRef.current?.click()}>{logoUrl ? "Change logo" : "Choose image"}</Button>
+              {logoUrl && <Button type="button" variant="danger" onClick={() => setAskRemove(true)}>Remove</Button>}
+            </>
+          )}
+        </div>
+        {result && <Alert tone={result.ok ? "success" : "danger"}>{result.ok ? result.message : result.error}</Alert>}
+      </div>
+      <ConfirmDialog
+        open={askRemove}
+        onClose={() => setAskRemove(false)}
+        title="Remove the logo?"
+        message="The tooth icon will be shown instead. You can upload a logo again any time."
+        confirmLabel="Remove logo"
+        tone="danger"
+        onConfirm={async () => { const r = await removeLogo(); setResult(r); return r.ok ? null : r.error; }}
+      />
+    </div>
   );
 }

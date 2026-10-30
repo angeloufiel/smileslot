@@ -4,7 +4,7 @@
 
 SmileSlot replaces the usual small-clinic setup of a paper appointment book, a Facebook Messenger inbox and GCash screenshots scattered across a secretary's phone. Patients see real open times and book in under a minute, as guests or with an account. The front desk confirms bookings, verifies GCash, Maya and bank payments, and handles walk-ins from one dashboard. Each dentist sees only their own patients.
 
-The demo runs a fictional clinic, **Harborview Dental Clinic**.
+The live site is set up for a sample clinic, **Harborview Dental Clinic**. The clinic name, logo, hours, services and staff are all changed from the owner's Settings, so the same system can be set up for any dental clinic.
 
 ![Homepage showing the next open check-up times](docs/screenshots/01-home.png)
 

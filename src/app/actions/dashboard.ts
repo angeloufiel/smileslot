@@ -1,6 +1,7 @@
 "use server";
 
-import { refresh, revalidatePath } from "next/cache";
+import { refresh, revalidatePath, updateTag } from "next/cache";
+import { BRANDING_TAG } from "@/lib/data/branding";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createAnonClient, createClient } from "@/lib/supabase/server";
@@ -69,6 +70,7 @@ export async function addReservationNote(formData: FormData): Promise<ActionResu
     .insert({ reservation_id: parsed.data.id, author_id: user.id, body: parsed.data.body });
   if (error) return { ok: false, error: friendlyDbError(error) };
   revalidatePath(`/dashboard/reservations/${parsed.data.id}`);
+  refresh(); // show the new note in the same response, not on a later render
   return { ok: true, data: undefined, message: "Note added." };
 }
 
@@ -462,8 +464,73 @@ export async function saveSettings(formData: FormData): Promise<ActionResult> {
   }).eq("id", 1).select("id").maybeSingle();
   if (error) return { ok: false, error: friendlyDbError(error) };
   if (!data) return { ok: false, error: "Only the clinic owner can change settings." };
+  updateTag(BRANDING_TAG);           // clinic name in every header, right away
   revalidatePath("/", "layout");
+  refresh();
   return { ok: true, data: undefined, message: "Settings saved." };
+}
+
+// ---------------------------------------------------------------- clinic logo (owner only)
+
+const LOGO_MAX_BYTES = 1024 * 1024;
+
+/** Real file type from the first bytes, not from the name or the browser's claim. */
+function imageKind(bytes: Uint8Array): "png" | "jpg" | null {
+  if (bytes.length > 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "png";
+  if (bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "jpg";
+  return null;
+}
+
+export async function uploadLogo(formData: FormData): Promise<ActionResult> {
+  await requireOwner();
+  const file = formData.get("logo");
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Choose a PNG or JPEG image." };
+  if (file.size > LOGO_MAX_BYTES) return { ok: false, error: "The logo must be 1 MB or smaller." };
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const kind = imageKind(bytes);
+  if (!kind) return { ok: false, error: "Only PNG or JPEG images can be used as a logo." };
+
+  const supabase = await createClient();
+  const { data: current } = await supabase.from("clinic_settings").select("logo_url").eq("id", 1).single();
+
+  // Upload with the service role (the owner was checked above), then save the URL as the owner so RLS still applies.
+  const admin = createAdminClient();
+  const path = `logo/${crypto.randomUUID()}.${kind}`;
+  const contentType = kind === "png" ? "image/png" : "image/jpeg";
+  const up = await admin.storage.from("branding").upload(path, bytes, { contentType, upsert: false, cacheControl: "31536000" });
+  if (up.error) {
+    console.error("[logo upload]", up.error);
+    return { ok: false, error: "The logo couldn't be uploaded. Please try again." };
+  }
+  const url = admin.storage.from("branding").getPublicUrl(path).data.publicUrl;
+  const { data, error } = await supabase.from("clinic_settings").update({ logo_url: url }).eq("id", 1).select("id");
+  if (error || !data?.length) {
+    await admin.storage.from("branding").remove([path]);
+    return { ok: false, error: error ? friendlyDbError(error) : "Only the clinic owner can change the logo." };
+  }
+  await removeOldLogo(current?.logo_url ?? null);
+  updateTag(BRANDING_TAG);
+  revalidatePath("/", "layout");
+  refresh();
+  return { ok: true, data: undefined, message: "Logo updated." };
+}
+
+export async function removeLogo(): Promise<ActionResult> {
+  await requireOwner();
+  const supabase = await createClient();
+  const { data: current } = await supabase.from("clinic_settings").select("logo_url").eq("id", 1).single();
+  const { data, error } = await supabase.from("clinic_settings").update({ logo_url: null }).eq("id", 1).select("id");
+  if (error || !data?.length) return { ok: false, error: error ? friendlyDbError(error) : "Only the clinic owner can change the logo." };
+  await removeOldLogo(current?.logo_url ?? null);
+  updateTag(BRANDING_TAG);
+  revalidatePath("/", "layout");
+  refresh();
+  return { ok: true, data: undefined, message: "Logo removed. The tooth icon is shown instead." };
+}
+
+async function removeOldLogo(url: string | null) {
+  const path = url?.split("/branding/")[1];
+  if (path?.startsWith("logo/")) await createAdminClient().storage.from("branding").remove([path]);
 }
 
 // ---------------------------------------------------------------- staff (owner only)
@@ -525,7 +592,20 @@ async function linkCalendar(
   return null;
 }
 
+/** password is "" when an existing account was made staff (they keep their own password). */
 export type NewStaff = { email: string; password: string; name: string };
+
+async function findUserIdByEmail(email: string): Promise<string | null> {
+  const admin = createAdminClient();
+  for (let page = 1; page <= 20; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) return null;
+    const hit = data.users.find((u) => u.email?.toLowerCase() === email);
+    if (hit) return hit.id;
+    if (data.users.length < 1000) return null;
+  }
+  return null;
+}
 
 export async function addStaff(formData: FormData): Promise<ActionResult<NewStaff>> {
   await requireOwner();
@@ -551,15 +631,29 @@ export async function addStaff(formData: FormData): Promise<ActionResult<NewStaf
   const { data: created, error: createError } = await admin.auth.admin.createUser({
     email, password, email_confirm: true, user_metadata: { full_name: fullName },
   });
+  const supabase = await createClient();
   if (createError || !created.user) {
     const exists = createError?.code === "email_exists" || /already|registered|exists/i.test(createError?.message ?? "");
-    return exists
-      ? { ok: false, error: "Someone already has an account with this email. Find them in the list (check Patient accounts) and press Edit.", fieldErrors: { email: "Already registered" } }
-      : { ok: false, error: "The account couldn't be created. Please try again." };
+    if (!exists) return { ok: false, error: "The account couldn't be created. Please try again." };
+    // They already signed up as a patient: make that account staff. They keep their own password.
+    const existingId = await findUserIdByEmail(email);
+    const { data: existing } = existingId
+      ? await supabase.from("profiles").select("role").eq("id", existingId).maybeSingle()
+      : { data: null };
+    if (!existingId || !existing) return { ok: false, error: "Someone already uses this email.", fieldErrors: { email: "Already registered" } };
+    if (existing.role !== "patient") return { ok: false, error: "This person is already on your staff list. Use Edit instead.", fieldErrors: { email: "Already staff" } };
+    const { data: promoted, error: promoteError } = await supabase.from("profiles").update({ role, full_name: fullName }).eq("id", existingId).select("id");
+    if (promoteError || !promoted?.length) return { ok: false, error: promoteError ? friendlyDbError(promoteError) : "The role couldn't be saved." };
+    if (role === "dentist") {
+      const linkError = await linkCalendar(supabase, existingId, calendar, fullName, title);
+      if (linkError) return { ok: false, error: linkError };
+    }
+    revalidatePath("/dashboard/settings");
+    refresh();
+    return { ok: true, data: { email, password: "", name: fullName } };
   }
   const userId = created.user.id;
 
-  const supabase = await createClient();
   const rollback = async (message: string): Promise<ActionResult<NewStaff>> => {
     await admin.auth.admin.deleteUser(userId); // don't leave a half-made account behind
     return { ok: false, error: message };
@@ -580,16 +674,17 @@ export async function updateStaff(formData: FormData): Promise<ActionResult> {
   const owner = await requireOwner();
   const parsed = z.object({
     userId: uuid,
+    email: z.email("Enter a valid email.").transform((v) => v.trim().toLowerCase()),
     fullName: personName,
     role: STAFF_ROLE,
     calendar: calendarChoice,
     title: z.string().trim().max(120).optional(),
   }).safeParse({
-    userId: formData.get("userId"), fullName: formData.get("fullName"), role: formData.get("role"),
-    calendar: formData.get("calendar") ?? "", title: formData.get("title") || undefined,
+    userId: formData.get("userId"), email: String(formData.get("email") ?? "").trim(), fullName: formData.get("fullName"),
+    role: formData.get("role"), calendar: formData.get("calendar") ?? "", title: formData.get("title") || undefined,
   });
   if (!parsed.success) return { ok: false, error: "Check the highlighted fields.", fieldErrors: fieldErrors(parsed.error) };
-  const { userId, fullName, role, calendar, title } = parsed.data;
+  const { userId, email, fullName, role, calendar, title } = parsed.data;
   if (userId === owner.id && role !== "owner") return { ok: false, error: "You can't remove your own owner role." };
   if (role === "dentist" && calendar === "") {
     return { ok: false, error: "Choose the dentist's calendar, or create a new one.", fieldErrors: { calendar: "Required" } };
@@ -604,9 +699,39 @@ export async function updateStaff(formData: FormData): Promise<ActionResult> {
   const linkError = await linkCalendar(supabase, userId, role === "dentist" ? calendar : "", fullName, title);
   if (linkError) return { ok: false, error: linkError };
 
+  // Sign-in email lives in Supabase Auth; only the Admin API can change it for someone else.
+  const admin = createAdminClient();
+  const { data: authUser } = await admin.auth.admin.getUserById(userId);
+  if (authUser.user && authUser.user.email?.toLowerCase() !== email) {
+    const { error: emailError } = await admin.auth.admin.updateUserById(userId, { email, email_confirm: true });
+    if (emailError) {
+      const taken = emailError.code === "email_exists" || /already|registered|exists/i.test(emailError.message);
+      return { ok: false, error: taken ? "Another account already uses that email." : "The email couldn't be changed.", fieldErrors: { email: taken ? "Already used" : "Not saved" } };
+    }
+  }
+
   revalidatePath("/dashboard", "layout");
   refresh();
   return { ok: true, data: undefined, message: `${fullName} saved.` };
+}
+
+/**
+ * Passwords are stored hashed, so nobody (not even the owner) can look one up.
+ * The owner can make a NEW temporary password for a staff member and give it to them.
+ */
+export async function resetStaffPassword(userId: string): Promise<ActionResult<NewStaff>> {
+  const owner = await requireOwner();
+  if (!uuid.safeParse(userId).success) return { ok: false, error: "Invalid request." };
+  if (userId === owner.id) return { ok: false, error: "Change your own password in My account." };
+  const supabase = await createClient();
+  const { data: person } = await supabase.from("profiles").select("full_name, role").eq("id", userId).maybeSingle();
+  if (!person || person.role === "patient") return { ok: false, error: "Only staff passwords can be reset here." };
+
+  const admin = createAdminClient();
+  const password = tempPassword();
+  const { data, error } = await admin.auth.admin.updateUserById(userId, { password });
+  if (error || !data.user) return { ok: false, error: "The password couldn't be reset. Please try again." };
+  return { ok: true, data: { email: data.user.email ?? "", password, name: person.full_name } };
 }
 
 // ---------------------------------------------------------------- my account (any staff)

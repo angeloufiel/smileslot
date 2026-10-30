@@ -1,10 +1,10 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { revalidatePath } from "next/cache";
+import { refresh, revalidatePath } from "next/cache";
 import { createAnonClient, createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, requireUser } from "@/lib/auth";
 import { friendlyDbError } from "@/lib/errors";
 import { bookingReceivedEmail, sendEmail } from "@/lib/email";
 import {
@@ -179,7 +179,7 @@ export async function submitPaymentAction(formData: FormData): Promise<ActionRes
   const file = formData.get("proof");
   let proofPath: string | undefined;
   if (file instanceof File && file.size > 0) {
-    if (file.size > MAX_PROOF_BYTES) return { ok: false, error: "The file is larger than 5 MB.", fieldErrors: { proof: "Max 5 MB." } };
+    if (file.size > MAX_PROOF_BYTES) return { ok: false, error: "The file is larger than 4 MB. Send a screenshot instead of a photo of the screen.", fieldErrors: { proof: "Max 4 MB." } };
     if (!(PROOF_TYPES as readonly string[]).includes(file.type)) {
       return { ok: false, error: "Upload a JPG, PNG, WebP or PDF.", fieldErrors: { proof: "JPG, PNG, WebP or PDF only." } };
     }
@@ -213,4 +213,23 @@ export async function submitPaymentAction(formData: FormData): Promise<ActionRes
   return updated
     ? { ok: true, data: updated, message: "Receipt sent. The clinic will verify it and email you." }
     : { ok: false, error: "Booking not found." };
+}
+
+/** A signed-in patient adds a booking they made as a guest (needs its booking number). */
+export async function claimBookingAction(formData: FormData): Promise<ActionResult> {
+  await requireUser();
+  const digits = String(formData.get("reference") ?? "").replace(/\D/g, "");
+  if (!/^[1-9]\d{7}$/.test(digits)) {
+    return { ok: false, error: "Booking numbers have 8 digits, like 4827-3159.", fieldErrors: { reference: "8 digits" } };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("claim_booking", { p_reference: digits });
+  if (error) {
+    return { ok: false, error: error.message.includes("BOOKING_NOT_FOUND")
+      ? "No booking with that number was made with your email. Check the number in your booking email."
+      : friendlyDbError(error) };
+  }
+  revalidatePath("/my/bookings");
+  refresh();
+  return { ok: true, data: undefined, message: "Added to your bookings." };
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { ButtonLink, Skeleton } from "@/components/ui";
+import { CareGallery } from "@/components/care-gallery";
 import { getClinic, getDentists, getNextOpenSlots, getServices, getWorkingHours } from "@/lib/data/public";
 import { formatPeso, formatTime } from "@/lib/format";
 
@@ -31,6 +32,9 @@ export default function HomePage() {
       </section>
 
       <div className="mx-auto max-w-6xl space-y-14 px-4 py-12 sm:px-6">
+        <Suspense fallback={<Skeleton className="h-80" />}>
+          <Gallery />
+        </Suspense>
         <Suspense fallback={<Skeleton className="h-64" />}>
           <ServicesSection />
         </Suspense>
@@ -100,6 +104,11 @@ function HeroSlotsSkeleton() {
       </div>
     </div>
   );
+}
+
+async function Gallery() {
+  const services = await getServices();
+  return <CareGallery services={services} />;
 }
 
 async function ServicesSection() {

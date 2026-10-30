@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { getCurrentUser } from "@/lib/auth";
+import { Brand, BrandName } from "@/components/brand";
 
 export function SiteHeader() {
   return (
     <header className="border-b border-line bg-surface/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <Link href="/" className="flex items-center gap-2.5 font-display text-lg font-bold whitespace-nowrap">
-          <ToothMark />
-          <span>Harborview Dental</span>
+        <Link href="/" className="flex min-w-0 items-center gap-2.5 font-display text-lg font-bold whitespace-nowrap">
+          <Brand />
         </Link>
         <nav aria-label="Main" className="flex items-center gap-1 text-sm font-medium sm:gap-2">
           <Link href="/track" className="hidden rounded-lg px-3 py-2 hover:bg-canvas sm:inline-block">Find my booking</Link>
@@ -51,9 +51,9 @@ export function SiteFooter() {
   return (
     <footer className="mt-auto border-t border-line bg-surface">
       <div className="mx-auto flex max-w-6xl flex-wrap justify-between gap-3 px-4 py-6 text-sm text-muted sm:px-6">
-        <p>Harborview Dental Clinic is a fictional demo clinic.</p>
+        <p>© <BrandName /></p>
         <p>
-          SmileSlot booking system, built with Next.js, TypeScript and Supabase.{" "}
+          Online booking by SmileSlot.{" "}
           <Link href="/login" className="underline underline-offset-2 hover:text-ink">Staff sign in</Link>
         </p>
       </div>

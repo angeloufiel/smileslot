@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { signOutAction } from "@/app/actions/auth";
-import { Badge, Button, ButtonLink, EmptyState, Skeleton } from "@/components/ui";
+import { Alert, Badge, Button, ButtonLink, EmptyState, Skeleton } from "@/components/ui";
+import { CareGallery } from "@/components/care-gallery";
+import { getServices } from "@/lib/data/public";
+import { ClaimBookingForm } from "./claim-form";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateTime, formatPeso, formatRef, humanize } from "@/lib/format";
@@ -11,18 +14,19 @@ import type { PaymentStatus, ReservationStatus } from "@/lib/types";
 
 export const metadata: Metadata = { title: "My bookings" };
 
-export default function MyBookingsPage() {
+export default function MyBookingsPage({ searchParams }: PageProps<"/my/bookings">) {
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
       <Suspense fallback={<Skeleton className="h-80" />}>
-        <MyBookings />
+        <MyBookings searchParams={searchParams} />
       </Suspense>
     </div>
   );
 }
 
-async function MyBookings() {
+async function MyBookings({ searchParams }: { searchParams: PageProps<"/my/bookings">["searchParams"] }) {
   const user = await requireUser("/my/bookings");
+  const welcome = (await searchParams).welcome === "1";
   const supabase = await createClient();
   // No .eq("customer_id", …) needed: Row Level Security only returns this patient's rows.
   const { data: bookings } = await supabase
@@ -31,6 +35,7 @@ async function MyBookings() {
     .order("starts_at", { ascending: false });
 
   const { upcoming, past } = splitUpcoming(bookings ?? []);
+  const services = await getServices();
 
   return (
     <>
@@ -45,6 +50,10 @@ async function MyBookings() {
         </div>
       </div>
 
+      {welcome && (
+        <div className="mb-6"><Alert tone="success">Welcome{user.fullName ? `, ${user.fullName.split(" ")[0]}` : ""}! Your account is ready. Book your first visit below.</Alert></div>
+      )}
+
       <h2 className="mb-3 text-xl font-bold">Upcoming</h2>
       {upcoming.length === 0 ? (
         <EmptyState title="No upcoming appointments"><Link href="/book" className="text-cobalt underline">Book a time</Link> that works for you.</EmptyState>
@@ -56,6 +65,14 @@ async function MyBookings() {
           <BookingList items={past} />
         </>
       )}
+
+      <section aria-labelledby="claim-title" className="mt-10 rounded-[var(--radius-panel)] bg-surface p-5 ring-1 ring-line">
+        <h2 id="claim-title" className="text-lg font-bold">Booked before without an account?</h2>
+        <p className="mb-4 text-sm text-muted">Add that booking here with its booking number. It must have been made with {user.email}.</p>
+        <ClaimBookingForm />
+      </section>
+
+      <div className="mt-10"><CareGallery services={services} compact heading="Book your next visit" /></div>
     </>
   );
 }
