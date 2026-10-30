@@ -44,3 +44,7 @@ next-env.d.ts
 # local test stack + screenshots
 /.local-stack/
 /tests/e2e/screenshots/
+
+# Supabase CLI cache (created by `supabase link`, machine-specific)
+supabase/.temp/
+.local-stack/
