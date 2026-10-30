@@ -14,7 +14,7 @@ export async function Brand({ size = "md" }: { size?: "md" | "lg" }) {
       ) : (
         <ToothMark className={box} />
       )}
-      <span className="truncate">{name}</span>
+      <span className="line-clamp-2 min-w-0 leading-tight [overflow-wrap:anywhere]">{name}</span>
     </>
   );
 }
