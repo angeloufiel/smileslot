@@ -41,7 +41,7 @@ Details and the reasoning behind every policy are in [docs/SECURITY.md](docs/SEC
 
 **For patients**
 - Live availability calculated from each dentist's working hours, breaks, holidays, time off, service length, cleanup time between patients, and existing bookings
-- Guest booking with no account needed, and a reference number like `SS-7K4MQ2XP`
+- Guest booking with no account needed, and an easy booking number like `4827-3159` (digits only, works typed with a dash, a space or neither)
 - Track, pay for and cancel a booking with reference + email (online cancellation closes 24 hours before)
 - Deposits: the time is held while the patient pays by GCash, Maya or bank transfer and uploads the receipt. Unpaid holds expire automatically.
 - Optional account: earlier guest bookings appear once the email address is confirmed

@@ -5,7 +5,7 @@ import { signOutAction } from "@/app/actions/auth";
 import { Badge, Button, ButtonLink, EmptyState, Skeleton } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { formatDateTime, formatPeso, humanize } from "@/lib/format";
+import { formatDateTime, formatPeso, formatRef, humanize } from "@/lib/format";
 import { PAYMENT_TONE, STATUS_TONE } from "@/lib/status";
 import type { PaymentStatus, ReservationStatus } from "@/lib/types";
 
@@ -81,7 +81,7 @@ function BookingList({ items }: { items: Row[] }) {
           <div>
             <p className="font-semibold">{b.service?.name}</p>
             <p className="text-sm text-muted">{formatDateTime(b.starts_at)} with {b.dentist?.name}</p>
-            <p className="text-sm text-muted">{b.reference_code}, {formatPeso(b.amount_paid)} of {formatPeso(b.price)} paid</p>
+            <p className="text-sm text-muted">Booking no. {formatRef(b.reference_code)}, {formatPeso(b.amount_paid)} of {formatPeso(b.price)} paid</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={STATUS_TONE[b.status]}>{humanize(b.status)}</Badge>

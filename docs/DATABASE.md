@@ -68,7 +68,7 @@ erDiagram
   }
   RESERVATIONS {
     uuid id PK
-    text reference_code UK "SS-XXXXXXXX"
+    text reference_code UK "8 digits, shown 4827-3159"
     uuid customer_id FK
     uuid service_id FK
     uuid resource_id FK

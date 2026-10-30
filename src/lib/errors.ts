@@ -12,7 +12,7 @@ const MESSAGES: Record<string, string> = {
   SERVICE_NOT_FOUND: "That service is not available.",
   STAFF_USE_DASHBOARD: "Staff accounts create bookings from the dashboard.",
   CONFIRM_EMAIL_FIRST: "Please confirm your email address first. Check your inbox for the link.",
-  BOOKING_NOT_FOUND: "We couldn't find a booking with that reference number and email.",
+  BOOKING_NOT_FOUND: "We couldn't find a booking with that booking number and email.",
   CANNOT_CANCEL_STATUS: "This booking can no longer be cancelled online.",
   CANCELLATION_WINDOW_PASSED: "It's less than 24 hours before your appointment. Please call the clinic to cancel.",
   INVALID_METHOD: "Choose GCash, Maya or bank transfer.",

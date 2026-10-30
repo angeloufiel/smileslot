@@ -5,6 +5,7 @@ import {
   addReservationNote, getProofUrl, recordPayment, rescheduleReservation, reviewPayment,
 } from "@/app/actions/dashboard";
 import { ActionForm } from "@/components/action-form";
+import { ConfirmDialog } from "@/components/dialog";
 import { Button, Field, Input, Select, Textarea } from "@/components/ui";
 
 export function ProofLink({ paymentId }: { paymentId: string }) {
@@ -31,31 +32,41 @@ export function ProofLink({ paymentId }: { paymentId: string }) {
   );
 }
 
-export function ReviewPaymentButtons({ paymentId }: { paymentId: string }) {
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  function decide(decision: "verified" | "rejected") {
+export function ReviewPaymentButtons({ paymentId, amountLabel }: { paymentId: string; amountLabel?: string }) {
+  const [asking, setAsking] = useState<"verified" | "rejected" | null>(null);
+
+  async function decide(decision: "verified" | "rejected", reason: string): Promise<string | null> {
     const fd = new FormData();
     fd.set("id", paymentId);
     fd.set("decision", decision);
-    if (decision === "rejected") {
-      const reason = prompt("Why is this payment rejected? The patient will see this.");
-      if (!reason?.trim()) return;
-      fd.set("reason", reason.trim());
-    } else if (!confirm("Confirm the money is in the clinic's GCash, Maya or bank account?")) {
-      return;
-    }
-    setError(null);
-    start(async () => {
-      const r = await reviewPayment(fd);
-      if (!r.ok) setError(r.error);
-    });
+    if (reason) fd.set("reason", reason);
+    const r = await reviewPayment(fd);
+    return r.ok ? null : r.error;
   }
+
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button type="button" className="min-h-9 px-3 py-1.5 text-xs" disabled={pending} onClick={() => decide("verified")}>Verify</Button>
-      <Button type="button" variant="danger" className="min-h-9 px-3 py-1.5 text-xs" disabled={pending} onClick={() => decide("rejected")}>Reject</Button>
-      {error && <p role="alert" className="w-full text-sm text-danger">{error}</p>}
+      <Button type="button" className="min-h-9 px-3 py-1.5 text-sm" onClick={() => setAsking("verified")}>Verify</Button>
+      <Button type="button" variant="danger" className="min-h-9 px-3 py-1.5 text-sm" onClick={() => setAsking("rejected")}>Reject</Button>
+      <ConfirmDialog
+        open={asking === "verified"}
+        onClose={() => setAsking(null)}
+        title={`Verify this payment${amountLabel ? ` of ${amountLabel}` : ""}?`}
+        message="Only verify after you see the money in the clinic's GCash, Maya or bank app. A screenshot alone isn't proof."
+        confirmLabel="Yes, money received"
+        onConfirm={(reason) => decide("verified", reason)}
+      />
+      <ConfirmDialog
+        open={asking === "rejected"}
+        onClose={() => setAsking(null)}
+        title="Reject this payment?"
+        message="The patient is emailed so they can send a correct receipt."
+        reasonLabel="Reason (the patient will see this)"
+        reasonPlaceholder="For example: amount doesn't match, or no transfer found with this reference number"
+        confirmLabel="Reject payment"
+        tone="danger"
+        onConfirm={(reason) => decide("rejected", reason)}
+      />
     </div>
   );
 }

@@ -11,7 +11,7 @@ export default function BookPage({ searchParams }: PageProps<"/book">) {
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
       <h1 className="text-3xl font-bold">Book an appointment</h1>
-      <p className="mt-1 text-muted">Choose a service and a time. You&apos;ll get a reference number right away.</p>
+      <p className="mt-1 text-muted">Choose a service and a time. You&apos;ll get a booking number right away.</p>
       <Suspense fallback={<Skeleton className="mt-8 h-96" />}>
         <BookingLoader searchParams={searchParams} />
       </Suspense>

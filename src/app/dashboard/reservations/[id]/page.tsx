@@ -6,7 +6,7 @@ import { StatusButtons } from "@/components/status-buttons";
 import { isFrontDesk, requireStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getStaffDentists } from "@/lib/data/dashboard";
-import { formatDateTime, formatPeso, humanize, methodLabel } from "@/lib/format";
+import { formatDateTime, formatPeso, formatRef, humanize, methodLabel } from "@/lib/format";
 import { PAYMENT_TONE, STATUS_TONE } from "@/lib/status";
 import { NoteForm, ProofLink, RecordPaymentForm, RescheduleForm, ReviewPaymentButtons } from "./panels";
 
@@ -52,7 +52,7 @@ async function ReservationDetail({ params, searchParams }: PageProps<"/dashboard
   return (
     <>
       <p className="mb-2 text-sm"><Link href="/dashboard/reservations" className="text-cobalt hover:underline">Appointments</Link></p>
-      <PageHeader title={r.contact_name} description={`${r.reference_code}, ${r.service?.name} with ${r.dentist?.name}`} />
+      <PageHeader title={r.contact_name} description={`Booking no. ${formatRef(r.reference_code)}, ${r.service?.name} with ${r.dentist?.name}`} />
       {sp.created && <div className="mb-4"><Alert tone="success">Booking created.</Alert></div>}
 
       <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
@@ -99,7 +99,7 @@ async function ReservationDetail({ params, searchParams }: PageProps<"/dashboard
                         {p.proof_path && <ProofLink paymentId={p.id} />}
                       </div>
                       {p.status === "awaiting_verification"
-                        ? <ReviewPaymentButtons paymentId={p.id} />
+                        ? <ReviewPaymentButtons paymentId={p.id} amountLabel={formatPeso(p.amount)} />
                         : <Badge tone={p.status === "verified" ? "success" : "danger"}>{humanize(p.status)}</Badge>}
                     </li>
                   ))}

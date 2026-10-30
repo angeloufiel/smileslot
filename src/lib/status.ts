@@ -33,8 +33,8 @@ export const ACTION_LABEL: Record<ReservationStatus, string> = {
   checked_in: "Check in",
   in_progress: "Start treatment",
   completed: "Complete",
-  cancelled: "Cancel",
-  rejected: "Reject",
+  cancelled: "Cancel appointment",
+  rejected: "Reject request",
   no_show: "Mark no-show",
   expired: "Expire",
 };

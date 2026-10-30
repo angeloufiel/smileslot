@@ -46,7 +46,12 @@ async function Reservations({ searchParams }: { searchParams: PageProps<"/dashbo
   } else query = query.order("starts_at", { ascending: false });
 
   if (status) query = query.eq("status", status);
-  if (q) query = query.or(`contact_name.ilike.%${q}%,reference_code.ilike.%${q}%,contact_phone.ilike.%${q}%,contact_email.ilike.%${q}%`);
+  if (q) {
+    // Booking numbers are stored without the dash, so "4827-3159" also finds 48273159.
+    const digits = q.replace(/\D/g, "");
+    const refFilter = digits.length >= 4 ? `,reference_code.ilike.%${digits}%` : "";
+    query = query.or(`contact_name.ilike.%${q}%,contact_phone.ilike.%${q}%,contact_email.ilike.%${q}%${refFilter}`);
+  }
 
   const { data, error } = await query;
   if (error) throw error;
@@ -81,7 +86,7 @@ async function Reservations({ searchParams }: { searchParams: PageProps<"/dashbo
         </div>
         <label className="sr-only" htmlFor="q">Search</label>
         <input
-          id="q" name="q" defaultValue={q} placeholder="Name, phone, email or SS- reference"
+          id="q" name="q" defaultValue={q} placeholder="Name, phone, email or booking number"
           className="min-h-11 w-72 rounded-[var(--radius-control)] border border-line bg-surface px-3 text-sm"
         />
         <Button type="submit" variant="secondary">Filter</Button>

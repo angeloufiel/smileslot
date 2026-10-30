@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { EmptyState, PageHeader, Skeleton } from "@/components/ui";
 import { requireOwner } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { formatDateTime, humanize } from "@/lib/format";
+import { formatDateTime, formatRef, humanize } from "@/lib/format";
 
 export const metadata = { title: "Audit log" };
 
@@ -63,7 +63,7 @@ async function Audit() {
                 <td className="px-4 py-3">{nameOf(l.actor_id)}</td>
                 <td className="px-4 py-3">
                   {l.action === "INSERT" ? "Created" : l.action === "UPDATE" ? "Updated" : "Deleted"} {humanize(l.table_name).replace(/s$/, "")}
-                  {ref ? <span className="block text-xs text-muted">{String(ref)}</span> : null}
+                  {ref ? <span className="block text-xs text-muted">Booking no. {formatRef(String(ref))}</span> : null}
                 </td>
                 <td className="px-4 py-3 text-muted">{fields.length ? fields.map(humanize).join(", ") : "—"}</td>
               </tr>

@@ -61,7 +61,8 @@ with sync_playwright() as p:
     page = ctx.new_page()
     errors = []
     page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
-    page.on("dialog", lambda d: d.accept("Receipt amount does not match") if d.type == "prompt" else d.accept())
+    native_dialogs = []   # the app must never use the browser's own alert/confirm/prompt boxes
+    page.on("dialog", lambda d: (native_dialogs.append(d.message), d.dismiss()))
 
     # ---------- 1. Guest books from the hero ----------
     page.goto(BASE)
@@ -78,9 +79,9 @@ with sync_playwright() as p:
     page.fill("textarea[name=notes]", "Sensitive lower left molar")
     page.screenshot(path=f"{SHOTS}/02-book-form.png", full_page=True)
     page.click("button:has-text('Book this time')")
-    page.wait_for_selector("text=Reference number", timeout=15000)
-    ref1 = page.locator("p.font-display.text-2xl").inner_text().strip()
-    ok(f"guest booking confirmed with reference {ref1}", re.fullmatch(r"SS-[A-Z0-9]{8}", ref1))
+    page.wait_for_selector("text=Your booking number", timeout=15000)
+    ref1 = page.locator("p.font-display.text-3xl").inner_text().strip()
+    ok(f"guest gets an easy booking number {ref1}", re.fullmatch(r"[1-9]\d{3}-\d{4}", ref1))
     ok("consultation is auto-confirmed", page.locator("text=You're booked.").count() == 1)
     page.screenshot(path=f"{SHOTS}/03-confirmation.png", full_page=True)
 
@@ -103,8 +104,8 @@ with sync_playwright() as p:
     page.fill("input[name=email]", "lia.guest@example.com")
     page.fill("input[name=phone]", "09179998888")
     page.click("button:has-text('Book and hold this time')")
-    page.wait_for_selector("text=Reference number", timeout=15000)
-    ref2 = page.locator("p.font-display.text-2xl").inner_text().strip()
+    page.wait_for_selector("text=Your booking number", timeout=15000)
+    ref2 = page.locator("p.font-display.text-3xl").inner_text().strip()
     ok("deposit booking is held, not confirmed", page.locator("text=Held until the deposit is paid").count() == 1)
     ok("payment instructions shown after booking", page.locator("text=GCash or Maya").count() >= 1)
 
@@ -120,6 +121,12 @@ with sync_playwright() as p:
     page.wait_for_selector("text=Receipt sent", timeout=15000)
     ok("receipt submitted → awaiting verification (not paid)", page.locator("text=Awaiting verification").count() >= 1)
     page.screenshot(path=f"{SHOTS}/04-track-after-receipt.png", full_page=True)
+
+    page.goto(f"{BASE}/track")
+    page.fill("input[name=reference]", ref1.replace("-", " "))   # typed with a space instead of a dash still works
+    page.fill("input[name=email]", "juan.guest@example.com")
+    page.click("button:has-text('Find booking')")
+    ok("booking number typed with a space is found", shows(page, "text=Juan Dela Cruz") or shows(page, f"text={ref1}"))
 
     page.goto(f"{BASE}/track")
     page.fill("input[name=reference]", ref1)
@@ -146,7 +153,10 @@ with sync_playwright() as p:
     ok("receipt opens through a short-lived signed URL", "token=" in popup.url)
     popup.close()
     page.locator(f"tr:has-text('{ref2}') button:has-text('Verify')").click()
-    page.wait_for_selector(f"text={ref2}", state="detached", timeout=15000)
+    ok("verify asks in an in-app dialog", shows(page, "dialog[open] >> text=Yes, money received"))
+    page.screenshot(path=f"{SHOTS}/06b-verify-dialog.png")
+    page.click("dialog[open] >> button:has-text('Yes, money received')")
+    page.wait_for_selector(f"tr:has-text('{ref2}')", state="detached", timeout=15000)
     ok("verified payment leaves the queue", True)
 
     page.goto(f"{BASE}/dashboard/reservations?view=all&q={ref2}")
@@ -182,11 +192,55 @@ with sync_playwright() as p:
     walk_in("Walk In Patient")
     ok("walk-in booking created by front desk (outside online hours)", shows(page, "text=Booking created."))
     walkin_url = page.url.split("?")[0]
+    ok("walk-in page shows the booking number", page.locator("text=/Booking no\\. [1-9]\\d{3}-\\d{4}/").count() >= 1)
     walk_in("Second Walk In")
     ok("booking the same dentist at the same time is refused", shows(page, "text=already has an appointment at that time"))
     page.screenshot(path=f"{SHOTS}/07b-double-booking-refused.png", full_page=True)
 
-    # Double booking attempt through the reschedule form: move walk-in onto Juan's time? use same dentist/time as Lia
+    # Cancel Juan's booking from the More menu: in-app dialog with a reason, no browser box.
+    page.goto(f"{BASE}/dashboard/reservations?view=all&q={ref1}")
+    page.click("text=Juan Dela Cruz")
+    page.wait_for_selector("text=Staff notes")
+    page.click("main button:has-text('More')")
+    ok("More menu lists the extra actions", shows(page, "[role=menu] >> text=Cancel appointment"))
+    page.click("[role=menu] >> text=Cancel appointment")
+    ok("cancel opens an in-app dialog asking for a reason", shows(page, "dialog[open] textarea"))
+    page.click("dialog[open] >> button:has-text('Cancel appointment')")
+    ok("a reason is required", shows(page, "dialog[open] >> text=Please write a short reason"))
+    page.fill("dialog[open] textarea", "Patient called to cancel")
+    page.click("dialog[open] >> button:has-text('Cancel appointment')")
+    ok("booking cancelled from the dialog", shows(page, "main span:has-text('Cancelled')"))
+
+    # Quick close: Dr. Ana's morning on the walk-in day. The walk-in patient must be listed to call.
+    page.goto(f"{BASE}/dashboard/schedule")
+    ok("secretary sees the Close time panel", shows(page, "text=Close morning"))
+    page.select_option("select[name=resourceId]", label="Dr. Ana Villanueva")
+    page.fill("input[name=date]", d3)
+    page.fill("input[name=reason]", "Urgent meeting")
+    page.click("button:has-text('Close morning')")
+    ok("closing the morning confirms the closed hours", shows(page, "text=/Dr\\. Ana Villanueva is closed on/"))
+    ok("patients already booked in that time are listed to call", shows(page, "text=Walk In Patient"))
+    page.screenshot(path=f"{SHOTS}/08a-close-morning.png", full_page=True)
+    ok("the closed time appears in the upcoming list", shows(page, "li:has-text('Urgent meeting') >> button:has-text('Reopen')"))
+    page.click("li:has-text('Urgent meeting') >> button:has-text('Reopen')")
+    page.click("dialog[open] >> button:has-text('Yes, reopen')")
+    page.wait_for_selector("li:has-text('Urgent meeting')", state="detached", timeout=15000)
+    ok("reopen removes the closed time", True)
+    ok("weekly hours have an Open/Closed switch per day", page.locator("input[role=switch]").count() >= 7)
+
+    # Notifications: open one, delete it, then delete all (secretary's own only).
+    page.goto(f"{BASE}/dashboard/notifications")
+    ok("notifications list has items", shows(page, "main ul a[href^='/dashboard/notifications/']"))
+    page.locator("main ul a[href^='/dashboard/notifications/']").first.click()
+    ok("a single notification opens in its own page", shows(page, "text=Back to all"))
+    page.screenshot(path=f"{SHOTS}/08b-notification.png", full_page=True)
+    page.click("main button:has-text('Delete')")
+    page.wait_for_url(re.compile(r"/dashboard/notifications$"), timeout=15000)
+    ok("deleting one notification returns to the list", True)
+    page.click("main button:has-text('Delete all')")
+    page.click("dialog[open] >> button:has-text('Delete all')")
+    ok("delete all empties the list", shows(page, "text=No notifications"))
+
     page.goto(f"{BASE}/dashboard/calendar")
     page.screenshot(path=f"{SHOTS}/08-calendar.png", full_page=True)
     ok("calendar renders appointments", shows(page, "main a[href^='/dashboard/reservations/']"))
@@ -218,7 +272,26 @@ with sync_playwright() as p:
     ok("dentist sees a Check in button on their appointment", shows(page, "button:has-text('Check in')"))
     page.click("button:has-text('Check in')")
     ok("dentist can check in a patient", shows(page, "main span:has-text('Checked in')"))
-    ok("dentist is not offered Cancel (front desk only)", page.locator("button:has-text('Cancel')").count() == 0)
+    more = page.locator("main button:has-text('More')")
+    if more.count():
+        more.click()
+    ok("dentist is not offered Cancel appointment (front desk only)", page.locator("text=Cancel appointment").count() == 0)
+    page.keyboard.press("Escape")
+
+    # A dentist closes their own afternoon.
+    page.goto(f"{BASE}/dashboard/schedule")
+    ok("dentist sees My schedule", shows(page, "h1:has-text('My schedule')"))
+    ok("dentist can only close their own calendar", page.locator("select[name=resourceId]").count() == 0
+       and page.locator("main >> text=Dr. Ana Villanueva").count() >= 1)
+    page.fill("input[name=date]", d3)
+    page.fill("input[name=reason]", "Seminar")
+    page.click("button:has-text('Close afternoon')")
+    ok("dentist closed their afternoon", shows(page, "text=in the afternoon (from 12:00 noon)"))
+    page.click("li:has-text('Seminar') >> button:has-text('Reopen')")
+    page.click("dialog[open] >> button:has-text('Yes, reopen')")
+    page.wait_for_selector("li:has-text('Seminar')", state="detached", timeout=15000)
+    ok("dentist reopened their afternoon", True)
+    ok("dentist doesn't get the weekly hours editor", page.locator("input[role=switch]").count() == 0)
     logout(ctx)
 
     # ---------- 5. Owner ----------
@@ -229,7 +302,52 @@ with sync_playwright() as p:
        shows(page, "tr:has-text('Rhea Santos'):has-text('payment')"))
     page.goto(f"{BASE}/dashboard/settings")
     ok("owner can open settings", shows(page, "text=Booking rules"))
+    ok("staff list shows login emails", shows(page, "text=secretary@demo.smileslot.app"))
     page.screenshot(path=f"{SHOTS}/11-settings.png", full_page=True)
+
+    # Add a new dentist with a new calendar.
+    import secrets
+    new_email = f"dr.test.{secrets.token_hex(3)}@example.com"
+    page.click("button:has-text('Add staff member')")
+    page.fill("dialog[open] input[name=fullName]", "Dr. Liza Mercado")
+    page.fill("dialog[open] input[name=email]", new_email)
+    page.fill("dialog[open] input[name=title]", "Orthodontist")
+    page.click("dialog[open] >> button:has-text('Create account')")
+    ok("owner added a dentist and got a one-time password", shows(page, "dialog[open] >> text=Account created"))
+    temp_pw = page.locator("dialog[open] dd.font-mono").inner_text().strip()
+    ok(f"temporary password is easy to read ({temp_pw})", re.fullmatch(r"[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}", temp_pw))
+    page.screenshot(path=f"{SHOTS}/11b-staff-added.png")
+    page.click("dialog[open] >> button:has-text('Done')")
+    ok("new dentist shows in the staff list", shows(page, f"li:has-text('{new_email}')"))
+
+    # Edit the name.
+    page.click(f"li:has-text('{new_email}') >> button:has-text('Edit')")
+    page.fill("dialog[open] input[name=fullName]", "Dr. Liza M. Mercado")
+    page.click("dialog[open] >> button:has-text('Save changes')")
+    ok("owner renamed the dentist", shows(page, "li:has-text('Dr. Liza M. Mercado')"))
+    ok("the dentist's calendar was renamed too", page.locator(f"li:has-text('{new_email}') >> text=calendar: Dr. Liza M. Mercado").count() == 1)
+    ok("Rhea is still a secretary", page.locator("li:has-text('secretary@demo.smileslot.app') span.rounded-full", has_text=re.compile(r"^Secretary$")).count() == 1)
+    logout(ctx)
+
+    # The new dentist signs in with the temporary password and changes it.
+    page.goto(f"{BASE}/login")
+    page.fill("input[name=email]", new_email)
+    page.fill("input[name=password]", temp_pw)
+    page.click("button[type=submit]")
+    ok("new dentist can sign in", left(page, "/login"))
+    page.goto(f"{BASE}/dashboard/account")
+    page.fill("input[name=current]", "wrong-password-1")
+    page.fill("input[name=next]", "a-new-password-123")
+    page.fill("input[name=confirm]", "a-new-password-123")
+    page.click("button:has-text('Change password')")
+    ok("wrong current password is refused", shows(page, "text=Your current password is wrong"))
+    page.fill("input[name=current]", temp_pw)
+    page.fill("input[name=next]", "a-new-password-123")
+    page.fill("input[name=confirm]", "a-new-password-123")
+    page.click("button:has-text('Change password')")
+    ok("dentist changed their password", shows(page, "text=Password changed"))
+    page.goto(f"{BASE}/dashboard/schedule")
+    ok("new dentist's schedule shows their own calendar", shows(page, "main >> text=Dr. Liza M. Mercado"))
     logout(ctx)
 
     # ---------- 6. Patient ----------
@@ -246,6 +364,7 @@ with sync_playwright() as p:
     overflow = m.evaluate("document.documentElement.scrollWidth > window.innerWidth")
     ok("no horizontal scrolling on mobile", not overflow)
 
+    ok(f"no browser alert/confirm/prompt boxes were used ({native_dialogs[:2]})", len(native_dialogs) == 0)
     real_errors = [e for e in errors if "favicon" not in e]
     ok(f"no browser console errors ({real_errors[:3]})", len(real_errors) == 0)
     browser.close()

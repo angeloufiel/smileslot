@@ -24,9 +24,11 @@ export async function DashboardNav() {
     { href: "/dashboard/calendar", label: "Calendar" },
     ...(frontDesk ? [{ href: "/dashboard/payments", label: "Payments", count: toVerify ?? 0 }] : []),
     { href: "/dashboard/patients", label: "Patients" },
-    ...(frontDesk ? [{ href: "/dashboard/services", label: "Services" }, { href: "/dashboard/schedule", label: "Hours & closures" }] : []),
+    ...(frontDesk ? [{ href: "/dashboard/services", label: "Services" }] : []),
+    { href: "/dashboard/schedule", label: frontDesk ? "Schedule" : "My schedule" },
     { href: "/dashboard/notifications", label: "Notifications", count: unread ?? 0 },
     ...(user.role === "owner" ? [{ href: "/dashboard/settings", label: "Settings & staff" }, { href: "/dashboard/audit", label: "Audit log" }] : []),
+    { href: "/dashboard/account", label: "My account" },
   ];
 
   return (
@@ -38,7 +40,7 @@ export async function DashboardNav() {
       <div className="mt-auto hidden border-t border-line px-2 pt-4 text-sm lg:block">
         <p className="font-semibold">{user.fullName || user.email}</p>
         <p className="text-muted">{humanize(user.role)}</p>
-        <div className="mt-3 flex gap-3">
+        <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
           <Link href="/" className="text-cobalt hover:underline">Public site</Link>
           <form action={signOutAction}><button className="text-cobalt hover:underline" type="submit">Sign out</button></form>
         </div>

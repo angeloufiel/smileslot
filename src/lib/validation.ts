@@ -21,7 +21,10 @@ export const bookingSchema = z.object({
 });
 
 export const lookupSchema = z.object({
-  reference: z.string().trim().toUpperCase().regex(/^SS-[A-Z0-9]{8}$/, "Reference numbers look like SS-7K4MQ2XP."),
+  // Accept "4827-3159", "4827 3159" or "48273159"; keep digits only.
+  reference: z.string().transform((v) => v.replace(/\D/g, "")).pipe(
+    z.string().regex(/^[1-9]\d{7}$/, "Booking numbers have 8 digits, like 4827-3159."),
+  ),
   email: z.email("Enter the email you booked with."),
 });
 

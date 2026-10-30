@@ -1,14 +1,15 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { refresh, revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createAnonClient, createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireFrontDesk, requireOwner, requireStaff } from "@/lib/auth";
 import { friendlyDbError } from "@/lib/errors";
 import { paymentReviewedEmail, sendEmail, statusChangedEmail } from "@/lib/email";
 import { NEEDS_REASON } from "@/lib/status";
+import { addDays, clinicDateKey } from "@/lib/format";
 import { fieldErrors, phoneSchema } from "@/lib/validation";
 import type { ActionResult, ReservationStatus } from "@/lib/types";
 
@@ -125,7 +126,7 @@ export async function createStaffBooking(formData: FormData): Promise<ActionResu
     customer = created.data;
   }
 
-  // reference_code is filled in by the database default (same SS-XXXXXXXX format as online bookings).
+  // reference_code (the 8-digit booking number) is filled in by the database default.
   const { data, error } = await supabase.from("reservations").insert({
     customer_id: customer.id,
     service_id: b.serviceId,
@@ -297,6 +298,7 @@ export async function saveWorkingHours(formData: FormData): Promise<ActionResult
     if (ins.error) return { ok: false, error: friendlyDbError(ins.error) };
   }
   revalidatePath("/dashboard/schedule");
+  refresh();
   return { ok: true, data: undefined, message: "Working hours saved." };
 }
 
@@ -309,7 +311,8 @@ export async function addClosure(formData: FormData): Promise<ActionResult> {
   const { error } = await supabase.from("clinic_closures").insert({ closed_on: parsed.data.date, reason: parsed.data.reason ?? null });
   if (error) return { ok: false, error: error.code === "23505" ? "That date is already closed." : friendlyDbError(error) };
   revalidatePath("/dashboard/schedule");
-  return { ok: true, data: undefined, message: "Closure added. No online bookings that day." };
+  refresh();
+  return { ok: true, data: undefined, message: "Clinic closed that day. No online bookings will be offered." };
 }
 
 export async function removeClosure(formData: FormData): Promise<ActionResult> {
@@ -320,27 +323,111 @@ export async function removeClosure(formData: FormData): Promise<ActionResult> {
   const { error } = await supabase.from("clinic_closures").delete().eq("id", id.data);
   if (error) return { ok: false, error: friendlyDbError(error) };
   revalidatePath("/dashboard/schedule");
-  return { ok: true, data: undefined };
+  refresh();
+  return { ok: true, data: undefined, message: "Clinic reopened that day." };
 }
 
-export async function addTimeOff(formData: FormData): Promise<ActionResult> {
-  await requireFrontDesk();
+export type ClosedResult = {
+  label: string;
+  affected: { id: string; name: string; phone: string; startsAt: string; ref: string }[];
+};
+
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+/** Manila wall-clock time on a date → ISO. "24:00" means the end of that day. */
+const toUtc = (date: string, hhmm: string) =>
+  hhmm === "24:00"
+    ? new Date(`${addDays(date, 1)}T00:00:00+08:00`).toISOString()
+    : new Date(`${date}T${hhmm.slice(0, 5)}:00+08:00`).toISOString();
+
+/**
+ * Close part of a dentist's day (urgent meeting, emergency).
+ * Morning = until 12:00 noon, afternoon = from 12:00 noon, whole day, or a custom range.
+ * The whole half-day is closed (not just working hours), so staff-made early or late
+ * bookings are caught too. Dentists may close only their own time; RLS enforces that.
+ * Bookings already in that time are NOT cancelled automatically; they are listed so staff can call the patients.
+ */
+export async function closeTime(formData: FormData): Promise<ActionResult<ClosedResult>> {
+  await requireStaff();
   const parsed = z.object({
     resourceId: uuid,
-    from: z.iso.datetime({ local: true }), to: z.iso.datetime({ local: true }),
+    date: z.iso.date("Pick a date."),
+    part: z.enum(["morning", "afternoon", "day", "custom"]),
+    from: z.string().optional(),
+    to: z.string().optional(),
     reason: z.string().trim().max(200).optional(),
-  }).safeParse({ resourceId: formData.get("resourceId"), from: formData.get("from"), to: formData.get("to"), reason: formData.get("reason") || undefined });
-  if (!parsed.success || parsed.data.to <= parsed.data.from) return { ok: false, error: "Choose a start and an end after it." };
-  const toUtc = (local: string) => new Date(`${local.length === 16 ? local + ":00" : local}+08:00`).toISOString();
-  const supabase = await createClient();
-  const { error } = await supabase.from("resource_time_off").insert({
-    resource_id: parsed.data.resourceId,
-    period: `[${toUtc(parsed.data.from)},${toUtc(parsed.data.to)})`,
-    reason: parsed.data.reason ?? null,
+  }).safeParse({
+    resourceId: formData.get("resourceId"), date: formData.get("date"), part: formData.get("part"),
+    from: formData.get("from") || undefined, to: formData.get("to") || undefined, reason: formData.get("reason") || undefined,
   });
-  if (error) return { ok: false, error: friendlyDbError(error) };
+  if (!parsed.success) return { ok: false, error: "Choose a dentist and a date.", fieldErrors: fieldErrors(parsed.error) };
+  const { resourceId, date, part, reason } = parsed.data;
+  if (date < clinicDateKey(new Date())) return { ok: false, error: "That day has already passed." };
+
+  const supabase = await createClient();
+  const { data: dentist } = await supabase.from("resources").select("name").eq("id", resourceId).maybeSingle();
+  if (!dentist) return { ok: false, error: "Dentist not found." };
+
+  let from = "00:00";
+  let to = "24:00";
+  if (part === "morning") to = "12:00";
+  else if (part === "afternoon") from = "12:00";
+  else if (part === "custom") {
+    if (!parsed.data.from || !parsed.data.to || !HHMM.test(parsed.data.from) || !HHMM.test(parsed.data.to) || parsed.data.to <= parsed.data.from) {
+      return { ok: false, error: "Choose a start time and an end time after it.", fieldErrors: { from: "Required" } };
+    }
+    from = parsed.data.from;
+    to = parsed.data.to;
+  }
+
+  const start = toUtc(date, from);
+  const end = toUtc(date, to);
+  const { error } = await supabase.from("resource_time_off").insert({
+    resource_id: resourceId,
+    period: `[${start},${end})`,
+    reason: reason || (part === "day" ? "Closed for the day" : part === "custom" ? "Closed" : `Closed ${part}`),
+  });
+  if (error) {
+    return { ok: false, error: error.code === "42501" || error.message.includes("row-level security")
+      ? "You can only close your own schedule." : friendlyDbError(error) };
+  }
+
+  // Bookings already inside the closed time (they stay booked; the clinic decides what to do).
+  const { data: clash } = await supabase
+    .from("reservations")
+    .select("id, contact_name, contact_phone, starts_at, reference_code")
+    .eq("resource_id", resourceId)
+    .in("status", ["pending", "confirmed", "checked_in", "in_progress"])
+    .lt("starts_at", end)
+    .gt("blocked_until", start)
+    .order("starts_at");
+
   revalidatePath("/dashboard/schedule");
-  return { ok: true, data: undefined, message: "Time off added." };
+  refresh();
+  const day = new Intl.DateTimeFormat("en-PH", { weekday: "long", month: "short", day: "numeric", timeZone: "Asia/Manila" })
+    .format(new Date(`${date}T12:00:00+08:00`));
+  const fmt = (hhmm: string) => new Intl.DateTimeFormat("en-PH", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" })
+    .format(new Date(toUtc(date, hhmm)));
+  const when = part === "day" ? "the whole day" : part === "morning" ? "in the morning (until 12:00 noon)"
+    : part === "afternoon" ? "in the afternoon (from 12:00 noon)" : `from ${fmt(from)} to ${fmt(to)}`;
+  return {
+    ok: true,
+    data: {
+      label: `${dentist.name} is closed on ${day}, ${when}. No online bookings will be offered then.`,
+      affected: (clash ?? []).map((r) => ({ id: r.id, name: r.contact_name, phone: r.contact_phone, startsAt: r.starts_at, ref: r.reference_code })),
+    },
+  };
+}
+
+export async function reopenTime(id: string): Promise<ActionResult> {
+  await requireStaff();
+  if (!uuid.safeParse(id).success) return { ok: false, error: "Invalid request." };
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("resource_time_off").delete().eq("id", id).select("id");
+  if (error) return { ok: false, error: friendlyDbError(error) };
+  if (!data?.length) return { ok: false, error: "You can only reopen your own closed times." };
+  revalidatePath("/dashboard/schedule");
+  refresh();
+  return { ok: true, data: undefined, message: "Reopened. Patients can book that time again." };
 }
 
 // ---------------------------------------------------------------- owner only
@@ -379,31 +466,226 @@ export async function saveSettings(formData: FormData): Promise<ActionResult> {
   return { ok: true, data: undefined, message: "Settings saved." };
 }
 
-export async function setUserRole(formData: FormData): Promise<ActionResult> {
-  await requireOwner();
-  const parsed = z.object({ userId: uuid, role: z.enum(["owner", "secretary", "dentist", "patient"]), resourceId: uuid.optional().or(z.literal("")) })
-    .safeParse({ userId: formData.get("userId"), role: formData.get("role"), resourceId: formData.get("resourceId") ?? "" });
-  if (!parsed.success) return { ok: false, error: "Invalid request." };
-  const { userId, role, resourceId } = parsed.data;
-  const supabase = await createClient();
-  const { error } = await supabase.from("profiles").update({ role }).eq("id", userId);
-  if (error) return { ok: false, error: friendlyDbError(error) };
+// ---------------------------------------------------------------- staff (owner only)
 
-  // Link (or unlink) the dentist's calendar to this login.
-  await supabase.from("resources").update({ profile_id: null }).eq("profile_id", userId);
-  if (role === "dentist" && resourceId) {
-    const { error: linkError } = await supabase.from("resources").update({ profile_id: userId }).eq("id", resourceId);
-    if (linkError) return { ok: false, error: friendlyDbError(linkError) };
+const STAFF_ROLE = z.enum(["owner", "secretary", "dentist", "patient"]);
+const personName = z.string().trim().min(2, "Enter the full name.").max(120);
+const calendarChoice = z.union([z.literal(""), z.literal("new"), uuid]);
+
+/** Easy-to-read temporary password, e.g. K7QM-4TXP-9WRA (no 0/O or 1/I/L to confuse). */
+function tempPassword() {
+  const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  const chars = Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+  return `${chars.slice(0, 4)}-${chars.slice(4, 8)}-${chars.slice(8)}`;
+}
+
+/**
+ * Link a dentist login to a calendar (the "resources" row the booking engine schedules).
+ * "new" creates a calendar with the person's name and offers every active service.
+ * Runs as the signed-in owner, so RLS still decides.
+ */
+async function linkCalendar(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  choice: string,
+  name: string,
+  title: string | undefined,
+): Promise<string | null> {
+  // A login has at most one calendar: detach whatever it had first.
+  const keep = choice !== "" && choice !== "new" ? choice : null;
+  let unlinkQuery = supabase.from("resources").update({ profile_id: null }).eq("profile_id", userId);
+  if (keep) unlinkQuery = unlinkQuery.neq("id", keep);
+  const unlink = await unlinkQuery;
+  if (unlink.error) return friendlyDbError(unlink.error);
+  if (choice === "") return null;
+
+  if (choice === "new") {
+    const { data, error } = await supabase
+      .from("resources")
+      .insert({ type: "dentist", name, title: title || "Dentist", profile_id: userId, is_active: true })
+      .select("id")
+      .single();
+    if (error || !data) return friendlyDbError(error);
+    const { data: services } = await supabase.from("services").select("id").eq("is_active", true);
+    if (services?.length) {
+      const link = await supabase.from("service_resources").insert(services.map((sv) => ({ service_id: sv.id, resource_id: data.id })));
+      if (link.error) return friendlyDbError(link.error);
+    }
+    return null;
   }
+
+  const { data, error } = await supabase
+    .from("resources")
+    .update({ profile_id: userId, name, ...(title ? { title } : {}) })
+    .eq("id", choice)
+    .select("id");
+  if (error) return error.code === "23505" ? "That calendar already belongs to another dentist." : friendlyDbError(error);
+  if (!data?.length) return "Calendar not found.";
+  return null;
+}
+
+export type NewStaff = { email: string; password: string; name: string };
+
+export async function addStaff(formData: FormData): Promise<ActionResult<NewStaff>> {
+  await requireOwner();
+  const parsed = z.object({
+    fullName: personName,
+    email: z.email("Enter a valid email.").transform((v) => v.trim().toLowerCase()),
+    role: z.enum(["secretary", "dentist", "owner"]),
+    calendar: calendarChoice,
+    title: z.string().trim().max(120).optional(),
+  }).safeParse({
+    fullName: formData.get("fullName"), email: String(formData.get("email") ?? "").trim(), role: formData.get("role"),
+    calendar: formData.get("calendar") ?? "", title: formData.get("title") || undefined,
+  });
+  if (!parsed.success) return { ok: false, error: "Check the highlighted fields.", fieldErrors: fieldErrors(parsed.error) };
+  const { fullName, email, role, calendar, title } = parsed.data;
+  if (role === "dentist" && calendar === "") {
+    return { ok: false, error: "Choose the dentist's calendar, or create a new one.", fieldErrors: { calendar: "Required" } };
+  }
+
+  // Only the Admin API can create a login for someone else. Everything after that runs as the owner.
+  const admin = createAdminClient();
+  const password = tempPassword();
+  const { data: created, error: createError } = await admin.auth.admin.createUser({
+    email, password, email_confirm: true, user_metadata: { full_name: fullName },
+  });
+  if (createError || !created.user) {
+    const exists = createError?.code === "email_exists" || /already|registered|exists/i.test(createError?.message ?? "");
+    return exists
+      ? { ok: false, error: "Someone already has an account with this email. Find them in the list (check Patient accounts) and press Edit.", fieldErrors: { email: "Already registered" } }
+      : { ok: false, error: "The account couldn't be created. Please try again." };
+  }
+  const userId = created.user.id;
+
+  const supabase = await createClient();
+  const rollback = async (message: string): Promise<ActionResult<NewStaff>> => {
+    await admin.auth.admin.deleteUser(userId); // don't leave a half-made account behind
+    return { ok: false, error: message };
+  };
+  const { data: updated, error: roleError } = await supabase.from("profiles").update({ role, full_name: fullName }).eq("id", userId).select("id");
+  if (roleError || !updated?.length) return rollback(roleError ? friendlyDbError(roleError) : "The role couldn't be saved.");
+  if (role === "dentist") {
+    const linkError = await linkCalendar(supabase, userId, calendar, fullName, title);
+    if (linkError) return rollback(linkError);
+  }
+
   revalidatePath("/dashboard/settings");
-  return { ok: true, data: undefined, message: "Role updated." };
+  refresh();
+  return { ok: true, data: { email, password, name: fullName } };
+}
+
+export async function updateStaff(formData: FormData): Promise<ActionResult> {
+  const owner = await requireOwner();
+  const parsed = z.object({
+    userId: uuid,
+    fullName: personName,
+    role: STAFF_ROLE,
+    calendar: calendarChoice,
+    title: z.string().trim().max(120).optional(),
+  }).safeParse({
+    userId: formData.get("userId"), fullName: formData.get("fullName"), role: formData.get("role"),
+    calendar: formData.get("calendar") ?? "", title: formData.get("title") || undefined,
+  });
+  if (!parsed.success) return { ok: false, error: "Check the highlighted fields.", fieldErrors: fieldErrors(parsed.error) };
+  const { userId, fullName, role, calendar, title } = parsed.data;
+  if (userId === owner.id && role !== "owner") return { ok: false, error: "You can't remove your own owner role." };
+  if (role === "dentist" && calendar === "") {
+    return { ok: false, error: "Choose the dentist's calendar, or create a new one.", fieldErrors: { calendar: "Required" } };
+  }
+
+  const supabase = await createClient();
+  // .select() makes a silent "0 rows updated" (RLS) visible instead of a false "saved".
+  const { data, error } = await supabase.from("profiles").update({ full_name: fullName, role }).eq("id", userId).select("id, role");
+  if (error) return { ok: false, error: friendlyDbError(error) };
+  if (!data?.length || data[0].role !== role) return { ok: false, error: "Nothing was saved. Refresh the page and try again." };
+
+  const linkError = await linkCalendar(supabase, userId, role === "dentist" ? calendar : "", fullName, title);
+  if (linkError) return { ok: false, error: linkError };
+
+  revalidatePath("/dashboard", "layout");
+  refresh();
+  return { ok: true, data: undefined, message: `${fullName} saved.` };
+}
+
+// ---------------------------------------------------------------- my account (any staff)
+
+export async function updateMyName(formData: FormData): Promise<ActionResult> {
+  const user = await requireStaff();
+  const parsed = personName.safeParse(formData.get("fullName"));
+  if (!parsed.success) return { ok: false, error: "Enter your full name.", fieldErrors: { fullName: parsed.error.issues[0].message } };
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("profiles").update({ full_name: parsed.data }).eq("id", user.id).select("id");
+  if (error || !data?.length) return { ok: false, error: friendlyDbError(error) };
+  // Keep a dentist's public calendar name in step (RLS lets only the front desk write calendars, so for a dentist the owner does this from Settings).
+  await supabase.from("resources").update({ name: parsed.data }).eq("profile_id", user.id);
+  revalidatePath("/dashboard", "layout");
+  refresh();
+  return { ok: true, data: undefined, message: "Name saved." };
+}
+
+export async function changeMyPassword(formData: FormData): Promise<ActionResult> {
+  const user = await requireStaff();
+  const parsed = z.object({
+    current: z.string().min(1, "Enter your current password."),
+    next: z.string().min(10, "Use at least 10 characters.").max(72),
+    confirm: z.string(),
+  }).refine((v) => v.next === v.confirm, { path: ["confirm"], message: "The two new passwords don't match." })
+    .safeParse({ current: formData.get("current"), next: formData.get("next"), confirm: formData.get("confirm") });
+  if (!parsed.success) return { ok: false, error: "Check the highlighted fields.", fieldErrors: fieldErrors(parsed.error) };
+
+  // Check the current password on a throwaway client, so a stolen open session can't silently change it.
+  const check = createAnonClient();
+  const { error: wrong } = await check.auth.signInWithPassword({ email: user.email, password: parsed.data.current });
+  if (wrong) return { ok: false, error: "Your current password is wrong.", fieldErrors: { current: "Wrong password" } };
+  await check.auth.signOut({ scope: "local" });
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.next });
+  if (error) {
+    return { ok: false, error: /different|same/i.test(error.message) ? "Choose a password you haven't used here before." : "The password couldn't be changed. Please try again." };
+  }
+  return { ok: true, data: undefined, message: "Password changed. Use the new one next time you sign in." };
 }
 
 // ---------------------------------------------------------------- notifications
+// RLS limits every query here to the signed-in person's own notifications.
 
 export async function markAllNotificationsRead(): Promise<void> {
   const user = await requireStaff();
   const supabase = await createClient();
   await supabase.from("notifications").update({ read_at: new Date().toISOString() }).eq("recipient_id", user.id).is("read_at", null);
   revalidatePath("/dashboard", "layout");
+  refresh();
+}
+
+export async function markNotificationRead(id: string): Promise<void> {
+  await requireStaff();
+  if (!uuid.safeParse(id).success) return;
+  const supabase = await createClient();
+  await supabase.from("notifications").update({ read_at: new Date().toISOString() }).eq("id", id).is("read_at", null);
+  revalidatePath("/dashboard", "layout");
+  refresh();
+}
+
+export async function deleteNotification(id: string): Promise<ActionResult> {
+  await requireStaff();
+  if (!uuid.safeParse(id).success) return { ok: false, error: "Invalid request." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("notifications").delete().eq("id", id);
+  if (error) return { ok: false, error: friendlyDbError(error) };
+  revalidatePath("/dashboard", "layout");
+  refresh();
+  return { ok: true, data: undefined, message: "Notification deleted." };
+}
+
+export async function deleteAllNotifications(): Promise<ActionResult> {
+  const user = await requireStaff();
+  const supabase = await createClient();
+  const { error } = await supabase.from("notifications").delete().eq("recipient_id", user.id);
+  if (error) return { ok: false, error: friendlyDbError(error) };
+  revalidatePath("/dashboard", "layout");
+  refresh();
+  return { ok: true, data: undefined, message: "All notifications deleted." };
 }

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { createBookingAction, getSlotsAction, type BookingConfirmation, type Slot } from "@/app/actions/booking";
 import { Alert, Badge, Button, ButtonLink, cx, Field, Input, Textarea } from "@/components/ui";
-import { addDays, clinicDateKey, clinicHour, formatDate, formatDateTime, formatPeso, formatTime } from "@/lib/format";
+import { addDays, clinicDateKey, clinicHour, formatDate, formatDateTime, formatPeso, formatRef, formatTime } from "@/lib/format";
 
 type ServiceOption = {
   id: string; name: string; description: string | null; category: string;
@@ -240,7 +240,7 @@ export function BookingWizard({ services, dentists, maxAdvanceDays, paymentInstr
               <Field label="Full name" name="fullName" error={errors.fullName}>
                 <Input name="fullName" autoComplete="name" required defaultValue={patient?.fullName} error={errors.fullName} />
               </Field>
-              <Field label="Email" name="email" error={errors.email} hint={patient ? "Bookings use your account email." : "We'll send your reference number here."}>
+              <Field label="Email" name="email" error={errors.email} hint={patient ? "Bookings use your account email." : "We'll send your booking number here."}>
                 <Input name="email" type="email" autoComplete="email" required defaultValue={patient?.email} readOnly={Boolean(patient)} error={errors.email} />
               </Field>
               <Field label="Mobile number" name="phone" error={errors.phone}>
@@ -322,18 +322,18 @@ function Confirmation({ c, service, paymentInstructions }: { c: BookingConfirmat
 
       <div className="mt-6 flex flex-wrap items-center gap-3 rounded-[var(--radius-control)] bg-canvas p-4">
         <div>
-          <p className="text-sm text-muted">Reference number</p>
-          <p className="font-display text-2xl font-bold tracking-wide">{c.reference}</p>
+          <p className="text-sm text-muted">Your booking number</p>
+          <p className="font-display text-3xl font-bold tracking-wide tabular-nums">{formatRef(c.reference)}</p>
         </div>
         <Button
           variant="secondary"
           className="ml-auto"
-          onClick={() => navigator.clipboard.writeText(c.reference).then(() => setCopied(true))}
+          onClick={() => navigator.clipboard.writeText(formatRef(c.reference)).then(() => setCopied(true))}
         >
           {copied ? "Copied" : "Copy"}
         </Button>
       </div>
-      <p className="mt-3 text-sm text-muted">Save this number. With your email, it lets you check, pay for or cancel this booking.</p>
+      <p className="mt-3 text-sm text-muted">Write this number down or take a screenshot. With your email, it lets you check, pay for or cancel this booking. We also emailed it to you.</p>
 
       {c.deposit > 0 && (
         <div className="mt-6 rounded-[var(--radius-control)] bg-sun-soft p-4 text-sm">

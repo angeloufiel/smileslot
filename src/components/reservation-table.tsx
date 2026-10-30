@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Badge, EmptyState } from "@/components/ui";
 import { StatusButtons } from "@/components/status-buttons";
-import { formatDateTime, formatPeso, formatTime, humanize } from "@/lib/format";
+import { formatDateTime, formatPeso, formatRef, formatTime, humanize } from "@/lib/format";
 import { PAYMENT_TONE, STATUS_TONE } from "@/lib/status";
 import type { ReservationListItem } from "@/lib/data/dashboard";
 import type { AppRole } from "@/lib/types";
@@ -20,7 +20,7 @@ export function ReservationTable({
             <th scope="col" className="px-4 py-3 font-medium">Service</th>
             <th scope="col" className="px-4 py-3 font-medium">Status</th>
             <th scope="col" className="px-4 py-3 font-medium">Payment</th>
-            <th scope="col" className="px-4 py-3 text-right font-medium">Actions</th>
+            <th scope="col" className="w-64 px-4 py-3 text-right font-medium">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-line">
@@ -32,7 +32,7 @@ export function ReservationTable({
               </td>
               <td className="px-4 py-3">
                 <Link href={`/dashboard/reservations/${r.id}`} className="font-semibold text-cobalt hover:underline">{r.contact_name}</Link>
-                <span className="block text-xs text-muted">{r.reference_code}{r.source !== "online" && `, ${humanize(r.source)}`}</span>
+                <span className="block text-xs text-muted">No. {formatRef(r.reference_code)}{r.source !== "online" && `, ${humanize(r.source)}`}</span>
               </td>
               <td className="px-4 py-3">{r.service?.name}</td>
               <td className="px-4 py-3"><Badge tone={STATUS_TONE[r.status]}>{humanize(r.status)}</Badge></td>
@@ -44,7 +44,7 @@ export function ReservationTable({
                   </>
                 )}
               </td>
-              <td className="px-4 py-3"><StatusButtons id={r.id} status={r.status} role={role} compact /></td>
+              <td className="px-4 py-3 align-middle"><StatusButtons id={r.id} status={r.status} role={role} compact /></td>
             </tr>
           ))}
         </tbody>

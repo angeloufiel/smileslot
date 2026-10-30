@@ -1,5 +1,5 @@
 import "server-only";
-import { formatDateTime, formatPeso } from "@/lib/format";
+import { formatDateTime, formatPeso, formatRef } from "@/lib/format";
 import { publicEnv } from "@/lib/env";
 
 /**
@@ -42,7 +42,7 @@ export function bookingReceivedEmail(b: {
       ? "Your appointment is confirmed."
       : "We received your booking request.",
     "",
-    `Reference: ${b.reference}`,
+    `Booking number: ${formatRef(b.reference)}`,
     `Service:   ${b.service}`,
     `Dentist:   ${b.dentist}`,
     `When:      ${formatDateTime(b.startsAt)}`,
@@ -58,8 +58,8 @@ export function bookingReceivedEmail(b: {
   } else if (b.status === "pending") {
     lines.push("The clinic will review your request and email you once it's confirmed.", "");
   }
-  lines.push(`Track or cancel your booking: ${trackUrl()}`, "Use your reference number and this email address.");
-  return { to: b.to, subject: `Booking ${b.reference}: ${b.status === "confirmed" ? "confirmed" : "received"}`, text: lines.join("\n") };
+  lines.push(`Track or cancel your booking: ${trackUrl()}`, "Use your booking number and this email address.");
+  return { to: b.to, subject: `Booking ${formatRef(b.reference)}: ${b.status === "confirmed" ? "confirmed" : "received"}`, text: lines.join("\n") };
 }
 
 export function statusChangedEmail(b: {
@@ -68,11 +68,11 @@ export function statusChangedEmail(b: {
   const label = b.status.replaceAll("_", " ");
   return {
     to: b.to,
-    subject: `Booking ${b.reference} is now ${label}`,
+    subject: `Booking ${formatRef(b.reference)} is now ${label}`,
     text: [
       `Hi ${b.name},`,
       "",
-      `Your appointment on ${formatDateTime(b.startsAt)} (reference ${b.reference}) is now ${label}.`,
+      `Your appointment on ${formatDateTime(b.startsAt)} (booking number ${formatRef(b.reference)}) is now ${label}.`,
       b.reason ? `Note from the clinic: ${b.reason}` : "",
       "",
       `Details: ${trackUrl()}`,
@@ -85,13 +85,13 @@ export function paymentReviewedEmail(b: {
 }): Email {
   return {
     to: b.to,
-    subject: b.approved ? `Payment received for ${b.reference}` : `Payment for ${b.reference} needs attention`,
+    subject: b.approved ? `Payment received for ${formatRef(b.reference)}` : `Payment for ${formatRef(b.reference)} needs attention`,
     text: [
       `Hi ${b.name},`,
       "",
       b.approved
-        ? `We verified your payment of ${formatPeso(b.amount)} for booking ${b.reference}. Thank you!`
-        : `We couldn't verify your payment of ${formatPeso(b.amount)} for booking ${b.reference}.`,
+        ? `We verified your payment of ${formatPeso(b.amount)} for booking ${formatRef(b.reference)}. Thank you!`
+        : `We couldn't verify your payment of ${formatPeso(b.amount)} for booking ${formatRef(b.reference)}.`,
       !b.approved && b.reason ? `Reason: ${b.reason}` : "",
       "",
       `Details: ${trackUrl()}`,

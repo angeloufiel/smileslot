@@ -138,7 +138,7 @@ export async function lookupBookingAction(input: { reference: string; email: str
   if (!parsed.success) return { ok: false, error: "Check the highlighted fields.", fieldErrors: fieldErrors(parsed.error) };
   const booking = await lookup(parsed.data.reference, parsed.data.email);
   // Same message whether the reference or the email was wrong: don't reveal which.
-  if (!booking) return { ok: false, error: "We couldn't find a booking with that reference number and email." };
+  if (!booking) return { ok: false, error: "We couldn't find a booking with that booking number and email." };
   return { ok: true, data: booking };
 }
 
@@ -174,7 +174,7 @@ export async function submitPaymentAction(formData: FormData): Promise<ActionRes
   const p = parsed.data;
 
   const booking = await lookup(p.reference, p.email);
-  if (!booking) return { ok: false, error: "We couldn't find a booking with that reference number and email." };
+  if (!booking) return { ok: false, error: "We couldn't find a booking with that booking number and email." };
 
   const file = formData.get("proof");
   let proofPath: string | undefined;

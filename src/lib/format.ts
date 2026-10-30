@@ -54,3 +54,12 @@ const METHOD_LABEL: Record<string, string> = {
 export const methodLabel = (m: string) => METHOD_LABEL[m] ?? humanize(m);
 
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** Booking numbers are stored as 8 digits and shown as 4827-3159 (easy to read aloud). */
+export function formatRef(code: string | null | undefined) {
+  const c = code ?? "";
+  return /^\d{8}$/.test(c) ? `${c.slice(0, 4)}-${c.slice(4)}` : c;
+}
+
+/** Whatever a patient typed ("4827 3159", "4827-3159") → "48273159". */
+export const normalizeRef = (input: string) => input.replace(/\D/g, "");

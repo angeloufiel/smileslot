@@ -111,7 +111,7 @@ select tests.ok(tests.visible($$select * from public.get_available_slots(
 select reference_code as ref1, status as st1 from public.book_appointment(
   '20000000-0000-4000-8000-000000000001', :'t0900', 'Juan Guest', 'juan@guest.local',
   '0917 123 4567', '30000000-0000-4000-8000-000000000001', 'First visit') \gset
-select tests.ok(:'ref1' ~ '^SS-[2-9A-HJKMNP-Z]{8}$', 'guest booking returns a reference code ' || :'ref1');
+select tests.ok(:'ref1' ~ '^[1-9][0-9]{7}$', 'guest booking returns an 8-digit booking number ' || :'ref1');
 select tests.ok(:'st1' = 'confirmed', 'consultation (no deposit) is auto-confirmed');
 
 select tests.throws(format($$select * from public.book_appointment(
@@ -148,7 +148,7 @@ select tests.throws(format($$select public.submit_payment(%L, 'lia@guest.local',
   'INVALID_METHOD', 'guests cannot self-report a cash payment');
 select tests.throws(format($$select public.submit_payment(%L, 'lia@guest.local', 'gcash', 999999, 'REF12345')$$, :'ref2'),
   'INVALID_AMOUNT', 'cannot submit more than the balance');
-select tests.throws(format($$select public.submit_payment(%L, 'lia@guest.local', 'gcash', 2000, 'REF12345', 'SS-OTHER123/x.png')$$, :'ref2'),
+select tests.throws(format($$select public.submit_payment(%L, 'lia@guest.local', 'gcash', 2000, 'REF12345', '11112222/x.png')$$, :'ref2'),
   'INVALID_PROOF_PATH', 'proof file must be in this booking''s own folder');
 
 select public.submit_payment(:'ref2', 'lia@guest.local', 'gcash', 2000, '1009 876 5432', :'ref2' || '/proof.jpg') as pay2 \gset
@@ -182,7 +182,7 @@ with u as (update public.reservations set status = 'cancelled' where reference_c
 select tests.ok((select count(*) from u) = 0, 'patient cannot update a reservation row directly (0 rows changed)');
 select tests.throws($$insert into public.reservations (reference_code, customer_id, service_id, resource_id, starts_at,
   ends_at, blocked_until, contact_name, contact_email, contact_phone, price)
-  values ('SS-HACK', private.my_customer_id(), '20000000-0000-4000-8000-000000000001',
+  values ('12345678', private.my_customer_id(), '20000000-0000-4000-8000-000000000001',
   '30000000-0000-4000-8000-000000000001', now() + interval '5 days', now(), now(), 'x', 'x@x.x', '0917000000', 0)$$,
   'row-level security', 'patient cannot insert a reservation directly (must use book_appointment)');
 
@@ -247,7 +247,7 @@ select tests.ok(tests.visible($$select * from public.notifications where type = 
 
 select tests.throws(format($$insert into public.reservations (reference_code, customer_id, service_id, resource_id,
   starts_at, ends_at, blocked_until, status, source, contact_name, contact_email, contact_phone, price)
-  select 'SS-WALKIN01', id, '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001',
+  select '22223333', id, '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001',
   %L, %L, %L, 'confirmed', 'walk_in', 'Walk In', 'w@x.local', '09170001111', 500
   from public.customers limit 1$$, :'t0915', :'t0915', :'t0915'),
   'reservations_no_overlap', 'even staff cannot double-book a dentist (database constraint)');
@@ -275,8 +275,8 @@ select id, '20000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-0000
   (:'d'::date + time '15:00') at time zone 'Asia/Manila', now(), now(), 'confirmed', 'walk_in',
   'Walk In', 'walkin@x.local', '09170001111', 1000
 from public.customers where lower(email) = 'juan@guest.local';
-select tests.ok((select reference_code ~ '^SS-[2-9A-HJKMNP-Z]{8}$' from public.reservations where contact_email = 'walkin@x.local'),
-  'staff walk-in booking gets an automatic SS- reference code');
+select tests.ok((select reference_code ~ '^[1-9][0-9]{7}$' from public.reservations where contact_email = 'walkin@x.local'),
+  'staff walk-in booking gets an automatic 8-digit booking number');
 select tests.ok((select ends_at - starts_at = interval '45 minutes' from public.reservations where contact_email = 'walkin@x.local'),
   'end time is calculated by the database, not trusted from the client');
 
@@ -316,11 +316,11 @@ reset role;
 -- A booking 2 hours from now cannot be cancelled online (24h cut-off)
 insert into public.reservations (reference_code, customer_id, service_id, resource_id, starts_at, ends_at,
   blocked_until, status, contact_name, contact_email, contact_phone, price)
-select 'SS-SOONSOON', id, '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001',
+select '33334444', id, '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001',
   date_trunc('minute', now()) + interval '2 hours', now(), now(), 'confirmed', 'Soon', 'soon@x.local', '09170002222', 500
 from public.customers where lower(email) = 'juan@guest.local';
 set role anon;
-select tests.throws($$select public.cancel_booking('SS-SOONSOON', 'soon@x.local')$$,
+select tests.throws($$select public.cancel_booking('3333-4444', 'soon@x.local')$$,
   'CANCELLATION_WINDOW_PASSED', 'cannot cancel online inside the 24-hour window');
 reset role;
 
@@ -349,13 +349,62 @@ insert into public.reservations (customer_id, service_id, resource_id, starts_at
 select id, '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000002',
   (:'d'::date + time '17:00') at time zone 'Asia/Manila', now(), now(), 'confirmed', 'Admin Insert', 'admin@x.local', '09170003333', 500
 from public.customers where lower(email) = 'juan@guest.local';
-select tests.ok((select reference_code like 'SS-%' from public.reservations where contact_email = 'admin@x.local'),
+select tests.ok((select reference_code ~ '^[1-9][0-9]{7}$' from public.reservations where contact_email = 'admin@x.local'),
   'service role inserts get a reference code (seed scripts, admin tools)');
 reset role;
 
 -- =====================================================================
 \echo
-\echo ===== 7. Race condition: two bookings for the same slot at the same time =====
+\echo ===== 7. Booking numbers, quick closures, notification clean-up =====
+set role anon;
+select set_config('request.jwt.claims', '{"role":"anon"}', false) \g /dev/null
+select tests.ok(tests.visible(format($$select * from public.get_booking(%L, 'juan@guest.local')$$,
+  substr(:'ref1', 1, 4) || '-' || substr(:'ref1', 5))) = 1, 'booking number works typed with a dash (4827-3159)');
+select tests.ok(tests.visible(format($$select * from public.get_booking(%L, 'juan@guest.local')$$,
+  ' ' || substr(:'ref1', 1, 4) || ' ' || substr(:'ref1', 5) || ' ')) = 1, 'booking number works typed with spaces');
+select tests.ok(private.format_ref('48273159') = '4827-3159', 'booking numbers display as 4827-3159');
+reset role;
+
+-- Dr Ana closes her own afternoon on the test date
+set role authenticated;
+select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-000000000003","role":"authenticated"}', false) \g /dev/null
+insert into public.resource_time_off (resource_id, period, reason)
+values ('30000000-0000-4000-8000-000000000001',
+  tstzrange((:'d'::date + time '13:00') at time zone 'Asia/Manila', (:'d'::date + time '17:00') at time zone 'Asia/Manila', '[)'),
+  'Urgent meeting');
+select tests.ok((select created_by from public.resource_time_off where reason = 'Urgent meeting') = 'a0000000-0000-4000-8000-000000000003',
+  'dentist can close their own afternoon (and it records who closed it)');
+select tests.throws($$insert into public.resource_time_off (resource_id, period) values ('30000000-0000-4000-8000-000000000002',
+  tstzrange(now() + interval '3 days', now() + interval '3 days 2 hours'))$$, 'row-level security',
+  'dentist cannot close another dentist''s time');
+reset role;
+
+select tests.ok(tests.visible(format($$select * from public.get_available_slots(
+  '20000000-0000-4000-8000-000000000001', %L, '30000000-0000-4000-8000-000000000001')
+  where (slot_start at time zone 'Asia/Manila')::time >= '13:00'$$, :'d')) = 0,
+  'closed afternoon offers no online times');
+
+set role authenticated;
+select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-000000000004","role":"authenticated"}', false) \g /dev/null
+with x as (delete from public.resource_time_off where reason = 'Urgent meeting' returning 1)
+select tests.ok((select count(*) from x) = 0, 'Dr Marco cannot reopen Dr Ana''s closed time');
+select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-000000000003","role":"authenticated"}', false) \g /dev/null
+with x as (delete from public.resource_time_off where reason = 'Urgent meeting' returning 1)
+select tests.ok((select count(*) from x) = 1, 'Dr Ana can reopen her own closed time');
+
+-- Notifications: delete own only
+select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-000000000002","role":"authenticated"}', false) \g /dev/null
+with x as (delete from public.notifications where recipient_id = 'a0000000-0000-4000-8000-000000000001' returning 1)
+select tests.ok((select count(*) from x) = 0, 'secretary cannot delete the owner''s notifications');
+with x as (delete from public.notifications returning 1)
+select tests.ok((select count(*) from x) > 0, 'secretary can delete all of their own notifications');
+reset role;
+select tests.ok((select count(*) from public.notifications where recipient_id = 'a0000000-0000-4000-8000-000000000001') > 0,
+  'owner''s notifications are untouched');
+
+-- =====================================================================
+\echo
+\echo ===== 8. Race condition: two bookings for the same slot at the same time =====
 \echo (run separately by run.sh with two parallel connections)
 \echo
 \echo ALL TESTS PASSED

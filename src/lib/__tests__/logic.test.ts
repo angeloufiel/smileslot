@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { addDays, clinicDateKey, clinicHour, clinicLocalToIso, formatPeso, plural } from "@/lib/format";
+import { addDays, clinicDateKey, clinicHour, clinicLocalToIso, formatPeso, formatRef, plural } from "@/lib/format";
 import { safeNext } from "@/lib/redirect";
 import { nextStatusesFor, TRANSITIONS } from "@/lib/status";
 import { bookingSchema, lookupSchema, paymentSchema } from "@/lib/validation";
@@ -93,12 +93,16 @@ describe("input validation", () => {
   it("rejects bad phone numbers", () => {
     expect(bookingSchema.safeParse({ ...base, phone: "call me" }).success).toBe(false);
   });
-  it("normalises reference numbers to upper case", () => {
-    const r = lookupSchema.parse({ reference: " ss-7k4mq2xp ", email: "a@b.co" });
-    expect(r.reference).toBe("SS-7K4MQ2XP");
+  it("accepts booking numbers typed with dashes or spaces", () => {
+    expect(lookupSchema.parse({ reference: " 4827-3159 ", email: "a@b.co" }).reference).toBe("48273159");
+    expect(lookupSchema.parse({ reference: "4827 3159", email: "a@b.co" }).reference).toBe("48273159");
+    expect(lookupSchema.safeParse({ reference: "SS-7K4MQ2XP", email: "a@b.co" }).success).toBe(false);
+  });
+  it("shows booking numbers as 4827-3159", () => {
+    expect(formatRef("48273159")).toBe("4827-3159");
   });
   it("only accepts online payment methods from patients", () => {
-    const p = { reference: "SS-7K4MQ2XP", email: "a@b.co", amount: "300", referenceNo: "12345" };
+    const p = { reference: "4827-3159", email: "a@b.co", amount: "300", referenceNo: "12345" };
     expect(paymentSchema.safeParse({ ...p, method: "gcash" }).success).toBe(true);
     expect(paymentSchema.safeParse({ ...p, method: "cash" }).success).toBe(false);
   });

@@ -4,8 +4,9 @@ import { useState, useTransition } from "react";
 import {
   cancelBookingAction, lookupBookingAction, submitPaymentAction, type TrackedBooking,
 } from "@/app/actions/booking";
+import { ConfirmDialog } from "@/components/dialog";
 import { Alert, Badge, Button, Field, Input, Panel, Select } from "@/components/ui";
-import { formatDateTime, formatPeso, humanize } from "@/lib/format";
+import { formatDateTime, formatPeso, formatRef, humanize } from "@/lib/format";
 import { PAYMENT_TONE, STATUS_TONE } from "@/lib/status";
 
 export function TrackBooking({ initialReference, paymentInstructions }: { initialReference: string; paymentInstructions: string | null }) {
@@ -14,6 +15,7 @@ export function TrackBooking({ initialReference, paymentInstructions }: { initia
   const [notice, setNotice] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [pending, start] = useTransition();
+  const [askCancel, setAskCancel] = useState(false);
 
   function find(formData: FormData) {
     setError(null); setNotice(null); setFieldErrors({});
@@ -32,8 +34,8 @@ export function TrackBooking({ initialReference, paymentInstructions }: { initia
       <Panel className="mt-8">
         <form action={find} className="space-y-4" noValidate>
           {error && <Alert>{error}</Alert>}
-          <Field label="Reference number" name="reference" error={fieldErrors.reference} hint="It starts with SS-, for example SS-7K4MQ2XP.">
-            <Input name="reference" defaultValue={initialReference} autoCapitalize="characters" required error={fieldErrors.reference} />
+          <Field label="Booking number" name="reference" error={fieldErrors.reference} hint="The 8-digit number from your confirmation, for example 4827-3159.">
+            <Input name="reference" defaultValue={initialReference} inputMode="numeric" autoComplete="off" placeholder="4827-3159" required error={fieldErrors.reference} />
           </Field>
           <Field label="Email" name="email" error={fieldErrors.email}>
             <Input name="email" type="email" autoComplete="email" required error={fieldErrors.email} />
@@ -48,14 +50,14 @@ export function TrackBooking({ initialReference, paymentInstructions }: { initia
   const depositDue = Math.max(0, booking.deposit - booking.amountPaid);
   const canPay = ["pending", "confirmed"].includes(booking.status) && balance > 0 && booking.paymentStatus !== "awaiting_verification";
 
-  function cancel() {
-    if (!booking || !confirm("Cancel this appointment? This can't be undone.")) return;
+  async function cancel(): Promise<string | null> {
+    if (!booking) return null;
     setError(null);
-    start(async () => {
-      const result = await cancelBookingAction({ reference: booking.reference, email: booking.email });
-      if (result.ok) { setBooking(result.data); setNotice(result.message ?? null); }
-      else setError(result.error);
-    });
+    const result = await cancelBookingAction({ reference: booking.reference, email: booking.email });
+    if (!result.ok) return result.error;
+    setBooking(result.data);
+    setNotice(result.message ?? null);
+    return null;
   }
 
   function pay(formData: FormData) {
@@ -78,8 +80,8 @@ export function TrackBooking({ initialReference, paymentInstructions }: { initia
       <Panel>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-sm text-muted">Reference</p>
-            <p className="font-display text-2xl font-bold tracking-wide">{booking.reference}</p>
+            <p className="text-sm text-muted">Booking number</p>
+            <p className="font-display text-2xl font-bold tracking-wide tabular-nums">{formatRef(booking.reference)}</p>
           </div>
           <Badge tone={STATUS_TONE[booking.status]}>{humanize(booking.status)}</Badge>
         </div>
@@ -106,13 +108,23 @@ export function TrackBooking({ initialReference, paymentInstructions }: { initia
           </p>
         )}
         <div className="mt-5 flex flex-wrap gap-3">
-          {booking.canCancel && <Button variant="danger" onClick={cancel} disabled={pending}>Cancel appointment</Button>}
+          {booking.canCancel && <Button variant="danger" onClick={() => setAskCancel(true)} disabled={pending}>Cancel appointment</Button>}
           {!booking.canCancel && ["pending", "confirmed"].includes(booking.status) && (
             <p className="text-sm text-muted">Less than 24 hours to go. Call the clinic to cancel or change this booking.</p>
           )}
           <Button variant="ghost" onClick={() => { setBooking(null); setNotice(null); setError(null); }}>Look up another booking</Button>
         </div>
       </Panel>
+
+      <ConfirmDialog
+        open={askCancel}
+        onClose={() => setAskCancel(false)}
+        title="Cancel this appointment?"
+        message={`${booking.service} with ${booking.dentist}, ${formatDateTime(booking.startsAt)}. The time becomes free for other patients. This can't be undone.`}
+        confirmLabel="Yes, cancel it"
+        tone="danger"
+        onConfirm={cancel}
+      />
 
       {canPay && (
         <Panel>

@@ -504,6 +504,8 @@ export type Database = {
       }
       resource_time_off: {
         Row: {
+          created_at: string
+          created_by: string | null
           id: string
           period: unknown
           reason: string | null
@@ -511,18 +513,28 @@ export type Database = {
         }
         ComputedFields: never
         Insert: {
+          created_at?: string
+          created_by?: string | null
           id?: string
           period: unknown
           reason?: string | null
           resource_id: string
         }
         Update: {
+          created_at?: string
+          created_by?: string | null
           id?: string
           period?: unknown
           reason?: string | null
           resource_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "resource_time_off_created_by_fkey"
+            columns: ["created_by"]
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "resource_time_off_resource_id_fkey"
             columns: ["resource_id"]

@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { Badge, EmptyState, PageHeader, Skeleton } from "@/components/ui";
 import { requireFrontDesk } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { formatDateTime, formatPeso, humanize, methodLabel } from "@/lib/format";
+import { formatDateTime, formatPeso, formatRef, humanize, methodLabel } from "@/lib/format";
 import { ProofLink, ReviewPaymentButtons } from "../reservations/[id]/panels";
 
 export const metadata = { title: "Payments" };
@@ -62,7 +62,7 @@ async function Payments({ searchParams }: { searchParams: PageProps<"/dashboard/
                         {p.reservation.contact_name}
                       </Link>
                     )}
-                    <span className="block text-xs text-muted">{p.reservation?.reference_code}</span>
+                    <span className="block text-xs text-muted">No. {formatRef(p.reservation?.reference_code)}</span>
                   </td>
                   <td className="px-4 py-3">
                     <span className="font-semibold tabular-nums">{p.kind === "refund" && "Refund, "}{formatPeso(p.amount)}</span>
@@ -70,7 +70,7 @@ async function Payments({ searchParams }: { searchParams: PageProps<"/dashboard/
                   </td>
                   <td className="px-4 py-3">{p.proof_path ? <ProofLink paymentId={p.id} /> : <span className="text-muted">None</span>}</td>
                   <td className="px-4 py-3">
-                    {p.status === "awaiting_verification" ? <ReviewPaymentButtons paymentId={p.id} /> : (
+                    {p.status === "awaiting_verification" ? <ReviewPaymentButtons paymentId={p.id} amountLabel={formatPeso(p.amount)} /> : (
                       <>
                         <Badge tone={p.status === "verified" ? "success" : "danger"}>{humanize(p.status)}</Badge>
                         <span className="mt-1 block text-xs text-muted">{p.verifier?.full_name}{p.rejection_reason && `: ${p.rejection_reason}`}</span>

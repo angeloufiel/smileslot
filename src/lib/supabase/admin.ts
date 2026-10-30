@@ -12,7 +12,9 @@ import type { Database } from "./database.types";
  *   2. Only after the caller has been authorised some other way
  *      (e.g. reference number + email verified by get_booking()).
  *   3. Only for the narrow job it is needed for: uploading a guest's payment
- *      proof and signing private file URLs.
+ *      proof, signing private file URLs, and (owner only) creating staff logins
+ *      and reading their login emails. Roles are still set with the owner's own
+ *      session, so RLS and the profile guard trigger decide.
  */
 export function createAdminClient() {
   const secret = process.env.SUPABASE_SECRET_KEY;

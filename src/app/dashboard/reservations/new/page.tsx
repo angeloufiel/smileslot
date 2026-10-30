@@ -10,7 +10,7 @@ export const metadata = { title: "New booking" };
 export default function NewBookingPage() {
   return (
     <>
-      <PageHeader title="New booking" description="For walk-ins and phone calls. The patient gets the same SS- reference number as online bookings." />
+      <PageHeader title="New booking" description="For walk-ins and phone calls. The patient gets a booking number just like online bookings." />
       <Suspense fallback={<Skeleton className="h-96" />}>
         <Loader />
       </Suspense>

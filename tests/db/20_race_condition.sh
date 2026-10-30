@@ -23,7 +23,7 @@ for i in $(seq 1 10); do
 done
 wait
 
-OK=$(grep -l '^SS-' "$TMP"/*.out | wc -l)
+OK=$(grep -lE '^[1-9][0-9]{7}$' "$TMP"/*.out | wc -l)
 BLOCKED=$(grep -l 'SLOT_UNAVAILABLE' "$TMP"/*.out | wc -l)
 rm -rf "$TMP"
 echo "succeeded=$OK blocked=$BLOCKED"
