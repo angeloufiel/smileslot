@@ -28,6 +28,19 @@ http.createServer((req, res) => {
     const chunks = []; req.on("data", (c) => chunks.push(c)); req.on("end", () => {
       const body = Buffer.concat(chunks);
       let m;
+      if ((m = url.pathname.match(/^\/storage\/v1\/object\/list\/([^/]+)$/)) && req.method === "POST") {
+        // Like Supabase: one level at a time; folders have id null.
+        const { prefix = "" } = JSON.parse(body.toString() || "{}");
+        const base = `${m[1]}/${prefix ? prefix.replace(/\/$/, "") + "/" : ""}`;
+        const seen = new Map();
+        for (const key of files.keys()) {
+          if (!key.startsWith(base)) continue;
+          const rest = key.slice(base.length);
+          const name = rest.split("/")[0];
+          seen.set(name, rest.includes("/") ? null : crypto.randomUUID());
+        }
+        return send(res, 200, [...seen].map(([name, id]) => ({ name, id })));
+      }
       if ((m = url.pathname.match(/^\/storage\/v1\/object\/sign\/([^/]+)\/(.+)$/))) {
         const key = `${m[1]}/${decodeURIComponent(m[2])}`;
         if (!files.has(key)) return send(res, 404, { message: "Object not found" });

@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:db": "bash tests/db/run.sh",
-    "seed:users": "tsx --env-file=.env.local scripts/seed-demo-users.mts"
+    "seed:users": "tsx --env-file=.env.local scripts/seed-demo-users.mts",
+    "create:owner": "tsx --env-file=.env.local scripts/create-owner.mts",
+    "reset:clinic": "tsx --env-file=.env.local scripts/reset-clinic.mts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

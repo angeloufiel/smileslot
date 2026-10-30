@@ -92,3 +92,25 @@ npx supabase db push
 npx supabase gen types typescript --linked > src/lib/supabase/database.types.ts
 npm run test:db    # needs a local PostgreSQL; CI also runs it on every push
 ```
+
+
+## Setting up the system for a new clinic
+
+Best practice: **one Supabase project and one Vercel project per clinic**, so clinics never share data. For a new clinic, follow the steps above with a new Supabase project, but **skip `npm run seed:users`** (that creates sample accounts). Then create the clinic's first admin:
+
+```bash
+npm run create:owner -- owner@theirclinic.com "Dr. Full Name"
+```
+
+It prints a temporary password once. The owner signs in, changes it in **My account**, and sets up everything else from the dashboard: clinic name, logo and contact details (Settings), staff (Settings → Add staff member), hours (Schedule) and services (Services).
+
+### Reusing a project (factory reset)
+
+To empty an existing project, for example the sample clinic, before handing it to a real clinic:
+
+```bash
+npm run reset:clinic -- --confirm <project-ref>
+npm run create:owner -- owner@theirclinic.com "Dr. Full Name"
+```
+
+`reset:clinic` permanently deletes every login, patient, appointment, payment, receipt file, notification, the audit log, dentist calendars and the logo. It keeps the service list and holiday closures, and resets the clinic name to "Your Dental Clinic". It refuses to run unless you type the project ref (the part before `.supabase.co`), so a copied command can't wipe the wrong clinic. There is no undo; download a backup first if the data matters.

@@ -157,6 +157,7 @@ async function TeamAndVisit() {
   const [dentists, hours, clinic] = await Promise.all([getDentists(), getWorkingHours(), getClinic()]);
   return (
     <div className="grid gap-10 md:grid-cols-2">
+      {dentists.length > 0 && (
       <section aria-labelledby="team-title">
         <h2 id="team-title" className="text-2xl font-bold">Our dentists</h2>
         <ul className="mt-4 space-y-4">
@@ -176,6 +177,7 @@ async function TeamAndVisit() {
           })}
         </ul>
       </section>
+      )}
       {clinic && (
         <section aria-labelledby="visit-title">
           <h2 id="visit-title" className="text-2xl font-bold">Visiting the clinic</h2>
